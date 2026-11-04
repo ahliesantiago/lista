@@ -202,6 +202,7 @@ export type Database = {
           item_id: string | null
           list_id: string
           name: string
+          notes: string | null
           size: string | null
           unit_id: string | null
         }
@@ -213,6 +214,7 @@ export type Database = {
           item_id?: string | null
           list_id: string
           name: string
+          notes?: string | null
           size?: string | null
           unit_id?: string | null
         }
@@ -224,6 +226,7 @@ export type Database = {
           item_id?: string | null
           list_id?: string
           name?: string
+          notes?: string | null
           size?: string | null
           unit_id?: string | null
         }
@@ -286,8 +289,10 @@ export type Database = {
           category_id: string | null
           created_at: string
           created_by: string | null
+          description: string | null
           id: string
           name: string
+          notes: string | null
           space_id: string
           status: string
           updated_at: string
@@ -296,8 +301,10 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          description?: string | null
           id?: string
           name: string
+          notes?: string | null
           space_id: string
           status?: string
           updated_at?: string
@@ -306,8 +313,10 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          description?: string | null
           id?: string
           name?: string
+          notes?: string | null
           space_id?: string
           status?: string
           updated_at?: string

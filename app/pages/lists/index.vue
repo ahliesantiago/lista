@@ -1,6 +1,4 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
-
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
 
@@ -17,63 +15,28 @@ const { data: lists, refresh } = await useAsyncData('lists', async () => {
   return data
 })
 
-const { data: categoryOptions } = await useAsyncData('category-options', async () => {
-  const { data, error } = await supabase.from('categories').select('id, name').order('name')
-  if (error) throw error
-  return data
-})
-
-const tagOptions = ref<Option[]>([])
-const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
-  const { data, error } = await supabase.from('tags').select('id, name').order('name')
-  if (error) throw error
-  return data
-})
-tagOptions.value = tagOptionsInitial.value ?? []
-
 const statusFilter = ref<'active' | 'archived'>('active')
 const visibleLists = computed(() => lists.value?.filter((l) => l.status === statusFilter.value) ?? [])
 
 const newName = ref('')
-const newCategoryId = ref<string | null>(null)
-const newTags = ref<Option[]>([])
 const error = ref('')
-const saving = ref(false)
-
-async function onCreateTag(searchTerm: string) {
-  if (!space.value) return
-  const { data, error: insertError } = await supabase
-    .from('tags')
-    .insert({ space_id: space.value.id, name: searchTerm })
-    .select('id, name')
-    .single()
-  if (insertError || !data) return
-  tagOptions.value.push(data)
-  newTags.value.push(data)
-}
+const creating = ref(false)
 
 async function createList() {
   if (!space.value) return
   error.value = ''
-  saving.value = true
+  creating.value = true
   const { data, error: insertError } = await supabase
     .from('lists')
-    .insert({ space_id: space.value.id, name: newName.value.trim(), category_id: newCategoryId.value })
+    .insert({ space_id: space.value.id, name: newName.value.trim() })
     .select('id')
     .single()
+  creating.value = false
   if (insertError || !data) {
-    saving.value = false
     error.value = insertError?.message ?? 'Failed to create list'
     return
   }
-  if (newTags.value.length > 0) {
-    await supabase.from('list_tags').insert(newTags.value.map((t) => ({ list_id: data.id, tag_id: t.id })))
-  }
-  saving.value = false
-  newName.value = ''
-  newCategoryId.value = null
-  newTags.value = []
-  await refresh()
+  await navigateTo(`/lists/${data.id}`)
 }
 
 async function setStatus(id: string, status: 'active' | 'archived') {
@@ -91,31 +54,9 @@ async function deleteList(id: string) {
   <div class="mx-auto max-w-2xl">
     <h1 class="mb-4 text-xl font-semibold">Lists</h1>
 
-    <form class="mb-6 flex flex-col gap-2" @submit.prevent="createList">
-      <div class="flex gap-2">
-        <UInput v-model="newName" placeholder="New list name" required class="flex-1" />
-        <UButton type="submit" :loading="saving">Add</UButton>
-      </div>
-      <div class="flex gap-2">
-        <USelectMenu
-          v-model="newCategoryId"
-          :items="categoryOptions ?? []"
-          value-key="id"
-          label-key="name"
-          placeholder="Category"
-          class="flex-1"
-        />
-        <USelectMenu
-          v-model="newTags"
-          :items="tagOptions"
-          multiple
-          create-item
-          label-key="name"
-          placeholder="Tags"
-          class="flex-1"
-          @create="onCreateTag"
-        />
-      </div>
+    <form class="mb-6 flex gap-2" @submit.prevent="createList">
+      <UInput v-model="newName" placeholder="New list name" required class="flex-1" />
+      <UButton type="submit" :loading="creating">Add</UButton>
     </form>
 
     <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>

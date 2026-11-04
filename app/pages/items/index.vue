@@ -1,5 +1,13 @@
 <script setup lang="ts">
 type Option = { id: string; name: string }
+type UnitOption = {
+  id: string
+  name_singular: string
+  name_plural: string
+  abbrev_singular: string | null
+  abbrev_plural: string | null
+}
+const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
 
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
@@ -12,7 +20,7 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
       category:categories(id, name),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
       item_tags(tags(id, name)),
-      item_units(units(id, name_singular))
+      item_units(units(id, name_singular, name_plural, abbrev_singular, abbrev_plural))
     `)
     .order('name')
   if (error) throw error
@@ -25,14 +33,14 @@ const { data: categoryOptions } = await useAsyncData('category-options', async (
   return data
 })
 
-const { data: unitOptionsRaw } = await useAsyncData('unit-options', async () => {
-  const { data, error } = await supabase.from('units').select('id, name_singular').order('name_singular')
+const { data: unitOptions } = await useAsyncData('unit-options', async () => {
+  const { data, error } = await supabase
+    .from('units')
+    .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
+    .order('name_singular')
   if (error) throw error
-  return data
+  return data as UnitOption[]
 })
-const unitOptions = computed<Option[]>(
-  () => unitOptionsRaw.value?.map((u) => ({ id: u.id, name: u.name_singular })) ?? [],
-)
 
 const tagOptions = ref<Option[]>([])
 const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
@@ -49,7 +57,7 @@ const pluralName = ref('')
 const price = ref<number | null>(null)
 const categoryId = ref<string | null>(null)
 const defaultUnitId = ref<string | null>(null)
-const selectedUnits = ref<Option[]>([])
+const selectedUnits = ref<UnitOption[]>([])
 const selectedTags = ref<Option[]>([])
 const error = ref('')
 const saving = ref(false)
@@ -78,7 +86,7 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   price.value = item.price
   categoryId.value = item.category?.id ?? null
   defaultUnitId.value = item.default_unit?.id ?? null
-  selectedUnits.value = item.item_units.map((iu) => ({ id: iu.units!.id, name: iu.units!.name_singular }))
+  selectedUnits.value = item.item_units.map((iu) => iu.units!)
   selectedTags.value = item.item_tags.map((it) => ({ id: it.tags!.id, name: it.tags!.name }))
   error.value = ''
   slideoverOpen.value = true
@@ -195,7 +203,7 @@ async function deleteItem(id: string) {
           </UFormField>
 
           <UFormField label="Category" hint="Optional">
-            <USelectMenu
+            <UInputMenu
               v-model="categoryId"
               :items="categoryOptions ?? []"
               value-key="id"
@@ -209,21 +217,29 @@ async function deleteItem(id: string) {
           </UFormField>
 
           <UFormField label="Default Unit" hint="Optional">
-            <USelectMenu
+            <UInputMenu
               v-model="defaultUnitId"
-              :items="unitOptions"
+              :items="unitOptions ?? []"
               value-key="id"
-              label-key="name"
+              label-key="name_singular"
+              :filter-fields="UNIT_FILTER_FIELDS"
               class="w-full"
             />
           </UFormField>
 
           <UFormField label="Allowed Units" hint="Optional">
-            <USelectMenu v-model="selectedUnits" :items="unitOptions" multiple label-key="name" class="w-full" />
+            <UInputMenu
+              v-model="selectedUnits"
+              :items="unitOptions ?? []"
+              multiple
+              label-key="name_singular"
+              :filter-fields="UNIT_FILTER_FIELDS"
+              class="w-full"
+            />
           </UFormField>
 
           <UFormField label="Tags" hint="Optional">
-            <USelectMenu
+            <UInputMenu
               v-model="selectedTags"
               :items="tagOptions"
               multiple

@@ -1,5 +1,13 @@
 <script setup lang="ts">
 type Option = { id: string; name: string }
+type UnitOption = {
+  id: string
+  name_singular: string
+  name_plural: string
+  abbrev_singular: string | null
+  abbrev_plural: string | null
+}
+const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
 
 const route = useRoute()
 const listId = route.params.id as string
@@ -11,7 +19,7 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
   const { data, error } = await supabase
     .from('lists')
     .select(`
-      id, name, status,
+      id, name, description, notes, status,
       category:categories(id, name),
       list_tags(tags(id, name))
     `)
@@ -25,8 +33,8 @@ const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, 
   const { data, error } = await supabase
     .from('list_items')
     .select(`
-      id, name, amount, size, is_done,
-      unit:units!list_items_unit_id_fkey(id, name_singular)
+      id, name, amount, size, notes, is_done,
+      unit:units!list_items_unit_id_fkey(id, name_singular, name_plural)
     `)
     .eq('list_id', listId)
     .order('created_at')
@@ -41,20 +49,81 @@ const { data: itemOptionsInitial } = await useAsyncData('item-options', async ()
 })
 const itemOptions = ref<Option[]>(itemOptionsInitial.value ?? [])
 
-const { data: unitOptionsRaw } = await useAsyncData('unit-options', async () => {
-  const { data, error } = await supabase.from('units').select('id, name_singular').order('name_singular')
+const { data: unitOptions } = await useAsyncData('unit-options', async () => {
+  const { data, error } = await supabase
+    .from('units')
+    .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
+    .order('name_singular')
+  if (error) throw error
+  return data as UnitOption[]
+})
+
+const { data: categoryOptions } = await useAsyncData('category-options', async () => {
+  const { data, error } = await supabase.from('categories').select('id, name').order('name')
   if (error) throw error
   return data
 })
-const unitOptions = computed<Option[]>(
-  () => unitOptionsRaw.value?.map((u) => ({ id: u.id, name: u.name_singular })) ?? [],
-)
+
+const tagOptions = ref<Option[]>([])
+const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
+  const { data, error } = await supabase.from('tags').select('id, name').order('name')
+  if (error) throw error
+  return data
+})
+tagOptions.value = tagOptionsInitial.value ?? []
+
+function unitLabel(unit: { name_singular: string; name_plural: string } | null, amount: number | null) {
+  if (!unit) return ''
+  return amount != null && amount !== 1 ? unit.name_plural : unit.name_singular
+}
+
+// --- editable header: name/description/notes/category/tags ---
+
+const name = ref(list.value?.name ?? '')
+const description = ref(list.value?.description ?? '')
+const notes = ref(list.value?.notes ?? '')
+const categoryId = ref<string | null>(list.value?.category?.id ?? null)
+const listTags = ref<Option[]>(list.value?.list_tags.map((lt) => lt.tags!) ?? [])
+
+async function saveListField(patch: Record<string, unknown>) {
+  await supabase.from('lists').update(patch).eq('id', listId)
+}
+
+watch(categoryId, (val) => {
+  saveListField({ category_id: val })
+})
+
+watch(listTags, async (newVal, oldVal) => {
+  const added = newVal.filter((t) => !oldVal.some((o) => o.id === t.id))
+  const removed = oldVal.filter((o) => !newVal.some((t) => t.id === o.id))
+  if (added.length > 0) {
+    await supabase.from('list_tags').insert(added.map((t) => ({ list_id: listId, tag_id: t.id })))
+  }
+  for (const r of removed) {
+    await supabase.from('list_tags').delete().eq('list_id', listId).eq('tag_id', r.id)
+  }
+})
+
+async function onCreateListTag(searchTerm: string) {
+  if (!space.value) return
+  const { data, error: insertError } = await supabase
+    .from('tags')
+    .insert({ space_id: space.value.id, name: searchTerm })
+    .select('id, name')
+    .single()
+  if (insertError || !data) return
+  tagOptions.value.push(data)
+  listTags.value.push(data)
+}
+
+// --- add item ---
 
 const selectedItem = ref<Option | null>(null)
 const addToMasterList = ref(true)
 const amount = ref<number | null>(null)
 const unitId = ref<string | null>(null)
 const size = ref('')
+const itemNotes = ref('')
 const error = ref('')
 const adding = ref(false)
 
@@ -64,8 +133,8 @@ function onCreateItemOption(searchTerm: string) {
 
 async function addItem() {
   if (!space.value || !selectedItem.value) return
-  const name = selectedItem.value.name.trim()
-  if (!name) return
+  const itemName = selectedItem.value.name.trim()
+  if (!itemName) return
 
   error.value = ''
   adding.value = true
@@ -74,7 +143,7 @@ async function addItem() {
   if (!itemId && addToMasterList.value) {
     const { data, error: itemError } = await supabase
       .from('items')
-      .insert({ space_id: space.value.id, name })
+      .insert({ space_id: space.value.id, name: itemName })
       .select('id, name')
       .single()
     if (itemError) {
@@ -86,13 +155,20 @@ async function addItem() {
     itemOptions.value.push(data)
   }
 
+  if (itemId && unitId.value) {
+    await supabase
+      .from('item_units')
+      .upsert({ item_id: itemId, unit_id: unitId.value }, { ignoreDuplicates: true })
+  }
+
   const { error: insertError } = await supabase.from('list_items').insert({
     list_id: listId,
     item_id: itemId,
-    name,
+    name: itemName,
     amount: amount.value,
     unit_id: unitId.value,
     size: size.value.trim() || null,
+    notes: itemNotes.value.trim() || null,
   })
 
   adding.value = false
@@ -106,6 +182,7 @@ async function addItem() {
   amount.value = null
   unitId.value = null
   size.value = ''
+  itemNotes.value = ''
   await refresh()
 }
 
@@ -124,8 +201,44 @@ async function removeItem(id: string) {
   await refresh()
 }
 
+// --- edit item inline ---
+
+const editingItemId = ref<string | null>(null)
+const editAmount = ref<number | null>(null)
+const editUnitId = ref<string | null>(null)
+const editSize = ref('')
+const editNotes = ref('')
+
+function startEdit(li: NonNullable<typeof listItems.value>[number]) {
+  editingItemId.value = li.id
+  editAmount.value = li.amount
+  editUnitId.value = li.unit?.id ?? null
+  editSize.value = li.size ?? ''
+  editNotes.value = li.notes ?? ''
+}
+
+function cancelEdit() {
+  editingItemId.value = null
+}
+
+async function saveEdit(id: string) {
+  await supabase
+    .from('list_items')
+    .update({
+      amount: editAmount.value,
+      unit_id: editUnitId.value,
+      size: editSize.value.trim() || null,
+      notes: editNotes.value.trim() || null,
+    })
+    .eq('id', id)
+  editingItemId.value = null
+  await refresh()
+}
+
+// --- list-level actions ---
+
 async function setStatus(status: 'active' | 'archived') {
-  await supabase.from('lists').update({ status }).eq('id', listId)
+  await saveListField({ status })
   await navigateTo('/lists')
 }
 
@@ -137,23 +250,48 @@ async function deleteList() {
 
 <template>
   <div v-if="list" class="mx-auto max-w-2xl">
-    <div class="mb-4 flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-semibold">{{ list.name }}</h1>
-        <div class="mt-1 flex items-center gap-2">
-          <span v-if="list.category" class="text-muted text-sm">{{ list.category.name }}</span>
-          <UBadge v-for="t in list.list_tags" :key="t.tags!.id" size="sm" variant="subtle">
-            {{ t.tags!.name }}
-          </UBadge>
+    <div class="mb-4 flex items-start justify-between gap-4">
+      <div class="flex-1">
+        <UInput
+          v-model="name"
+          class="mb-2 w-full text-lg font-semibold"
+          @blur="saveListField({ name })"
+        />
+        <UInput
+          v-model="description"
+          placeholder="Description (optional)"
+          class="mb-2 w-full"
+          @blur="saveListField({ description: description || null })"
+        />
+        <UTextarea
+          v-model="notes"
+          placeholder="Notes (optional)"
+          class="mb-2 w-full"
+          @blur="saveListField({ notes: notes || null })"
+        />
+        <div class="flex gap-2">
+          <UInputMenu
+            v-model="categoryId"
+            :items="categoryOptions ?? []"
+            value-key="id"
+            label-key="name"
+            placeholder="Category"
+            class="flex-1"
+          />
+          <UInputMenu
+            v-model="listTags"
+            :items="tagOptions"
+            multiple
+            create-item
+            label-key="name"
+            placeholder="Tags"
+            class="flex-1"
+            @create="onCreateListTag"
+          />
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <UButton
-          v-if="list.status === 'active'"
-          size="sm"
-          variant="outline"
-          @click="setStatus('archived')"
-        >
+      <div class="flex shrink-0 items-center gap-2">
+        <UButton v-if="list.status === 'active'" size="sm" variant="outline" @click="setStatus('archived')">
           Archive
         </UButton>
         <UButton v-else size="sm" variant="outline" @click="setStatus('active')">Unarchive</UButton>
@@ -167,7 +305,7 @@ async function deleteList() {
     </div>
 
     <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addItem">
-      <USelectMenu
+      <UInputMenu
         v-model="selectedItem"
         :items="itemOptions"
         create-item
@@ -179,9 +317,17 @@ async function deleteList() {
       <UCheckbox v-if="selectedItem && !selectedItem.id" v-model="addToMasterList" label="Add to master list" />
       <div class="grid grid-cols-3 gap-2">
         <UInputNumber v-model="amount" placeholder="Qty" :min="0" />
-        <USelectMenu v-model="unitId" :items="unitOptions" value-key="id" label-key="name" placeholder="Unit" />
+        <UInputMenu
+          v-model="unitId"
+          :items="unitOptions ?? []"
+          value-key="id"
+          label-key="name_singular"
+          :filter-fields="UNIT_FILTER_FIELDS"
+          placeholder="Unit"
+        />
         <UInput v-model="size" placeholder="Size" />
       </div>
+      <UInput v-model="itemNotes" placeholder="Notes (optional)" />
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
       <UButton type="submit" :loading="adding">Add item</UButton>
     </form>
@@ -190,19 +336,43 @@ async function deleteList() {
       <li
         v-for="li in listItems"
         :key="li.id"
-        class="flex items-center justify-between rounded border border-default px-3 py-2"
+        class="rounded border border-default px-3 py-2"
       >
-        <label class="flex flex-1 items-center gap-3">
-          <UCheckbox :model-value="li.is_done" @update:model-value="toggleDone(li.id, li.is_done)" />
-          <span :class="{ 'text-muted line-through': li.is_done }">
-            {{ li.name }}
-            <span v-if="li.amount != null" class="text-muted text-sm">
-              {{ li.amount }}<span v-if="li.unit">{{ ' ' + li.unit.name_singular }}</span>
+        <div v-if="editingItemId !== li.id" class="flex items-center justify-between">
+          <label class="flex flex-1 items-center gap-3">
+            <UCheckbox :model-value="li.is_done" @update:model-value="toggleDone(li.id, li.is_done)" />
+            <span :class="{ 'text-muted line-through': li.is_done }" class="cursor-pointer" @click="startEdit(li)">
+              {{ li.name }}
+              <span v-if="li.amount != null" class="text-muted text-sm">
+                {{ li.amount }}<span v-if="li.unit">{{ ' ' + unitLabel(li.unit, li.amount) }}</span>
+              </span>
+              <span v-if="li.size" class="text-muted text-sm">({{ li.size }})</span>
+              <span v-if="li.notes" class="text-muted block text-xs">{{ li.notes }}</span>
             </span>
-            <span v-if="li.size" class="text-muted text-sm">({{ li.size }})</span>
-          </span>
-        </label>
-        <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeItem(li.id)" />
+          </label>
+          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeItem(li.id)" />
+        </div>
+
+        <div v-else class="flex flex-col gap-2">
+          <span class="font-medium">{{ li.name }}</span>
+          <div class="grid grid-cols-3 gap-2">
+            <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
+            <UInputMenu
+              v-model="editUnitId"
+              :items="unitOptions ?? []"
+              value-key="id"
+              label-key="name_singular"
+              :filter-fields="UNIT_FILTER_FIELDS"
+              placeholder="Unit"
+            />
+            <UInput v-model="editSize" placeholder="Size" />
+          </div>
+          <UInput v-model="editNotes" placeholder="Notes (optional)" />
+          <div class="flex gap-2">
+            <UButton size="sm" @click="saveEdit(li.id)">Save</UButton>
+            <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
+          </div>
+        </div>
       </li>
       <li v-if="listItems && listItems.length === 0" class="text-muted text-sm">No items yet.</li>
     </ul>
