@@ -2,21 +2,34 @@
 definePageMeta({ middleware: 'guest' })
 
 const supabase = useSupabaseClient()
-const email = ref('')
+const identifier = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
+const INVALID_CREDENTIALS_MESSAGE = 'Invalid login credentials'
+
 async function onSubmit() {
   error.value = ''
   loading.value = true
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value,
-  })
+
+  const trimmed = identifier.value.trim()
+  let email = trimmed
+
+  if (!trimmed.includes('@')) {
+    const { data: resolvedEmail } = await supabase.rpc('resolve_login_email', { identifier: trimmed })
+    if (!resolvedEmail) {
+      loading.value = false
+      error.value = INVALID_CREDENTIALS_MESSAGE
+      return
+    }
+    email = resolvedEmail
+  }
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: password.value })
   loading.value = false
   if (signInError) {
-    error.value = signInError.message
+    error.value = INVALID_CREDENTIALS_MESSAGE
     return
   }
   await navigateTo('/')
@@ -31,8 +44,8 @@ async function onSubmit() {
       </template>
 
       <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-        <UFormField label="Email">
-          <UInput v-model="email" type="email" autocomplete="email" required class="w-full" />
+        <UFormField label="Email or Username">
+          <UInput v-model="identifier" autocomplete="username" required class="w-full" />
         </UFormField>
 
         <UFormField label="Password">

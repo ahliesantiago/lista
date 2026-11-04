@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -42,21 +43,21 @@ export type Database = {
       item_categories: {
         Row: {
           created_at: string
-          created_by: number | null
+          created_by: string | null
           id: number
           item_category_name: string
           updated_at: string
         }
         Insert: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           item_category_name: string
           updated_at?: string
         }
         Update: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           item_category_name?: string
           updated_at?: string
@@ -74,21 +75,21 @@ export type Database = {
       items: {
         Row: {
           created_at: string
-          created_by: number | null
+          created_by: string | null
           id: number
           item_name: string
           updated_at: string
         }
         Insert: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           item_name: string
           updated_at?: string
         }
         Update: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           item_name?: string
           updated_at?: string
@@ -106,21 +107,21 @@ export type Database = {
       list_types: {
         Row: {
           created_at: string
-          created_by: number | null
+          created_by: string | null
           id: number
           list_type_name: string
           updated_at: string
         }
         Insert: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           list_type_name: string
           updated_at?: string
         }
         Update: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           list_type_name?: string
           updated_at?: string
@@ -140,21 +141,21 @@ export type Database = {
           created_at: string
           id: number
           list_name: string
-          owner: number
+          owner: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           id?: number
           list_name: string
-          owner: number
+          owner: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: number
           list_name?: string
-          owner?: number
+          owner?: string
           updated_at?: string
         }
         Relationships: [
@@ -166,33 +167,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          full_name: string | null
-          id: string
-          updated_at: string | null
-          username: string | null
-          website: string | null
-        }
-        Insert: {
-          avatar_url?: string | null
-          full_name?: string | null
-          id: string
-          updated_at?: string | null
-          username?: string | null
-          website?: string | null
-        }
-        Update: {
-          avatar_url?: string | null
-          full_name?: string | null
-          id?: string
-          updated_at?: string | null
-          username?: string | null
-          website?: string | null
-        }
-        Relationships: []
       }
       space_members: {
         Row: {
@@ -250,7 +224,7 @@ export type Database = {
       units: {
         Row: {
           created_at: string
-          created_by: number | null
+          created_by: string | null
           id: number
           unit_abbrev_plural: string | null
           unit_abbrev_singular: string | null
@@ -260,7 +234,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           unit_abbrev_plural?: string | null
           unit_abbrev_singular?: string | null
@@ -270,7 +244,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: number | null
+          created_by?: string | null
           id?: number
           unit_abbrev_plural?: string | null
           unit_abbrev_singular?: string | null
@@ -290,28 +264,28 @@ export type Database = {
       }
       users: {
         Row: {
-          created_at: string
-          email_address: string
-          id: number
+          avatar_url: string | null
+          id: string
           preferred_name: string | null
-          updated_at: string
+          updated_at: string | null
           username: string
+          website: string | null
         }
         Insert: {
-          created_at?: string
-          email_address: string
-          id?: number
+          avatar_url?: string | null
+          id: string
           preferred_name?: string | null
-          updated_at?: string
+          updated_at?: string | null
           username: string
+          website?: string | null
         }
         Update: {
-          created_at?: string
-          email_address?: string
-          id?: number
+          avatar_url?: string | null
+          id?: string
           preferred_name?: string | null
-          updated_at?: string
+          updated_at?: string | null
           username?: string
+          website?: string | null
         }
         Relationships: []
       }
@@ -321,6 +295,7 @@ export type Database = {
     }
     Functions: {
       my_space_ids: { Args: never; Returns: string[] }
+      resolve_login_email: { Args: { identifier: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

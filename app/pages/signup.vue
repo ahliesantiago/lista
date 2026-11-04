@@ -2,18 +2,43 @@
 definePageMeta({ middleware: 'guest' })
 
 const supabase = useSupabaseClient()
-const email = ref('')
+
+const username = ref('')
+const preferredName = ref('')
+const spaceName = ref('')
 const password = ref('')
+const email = ref('')
 const error = ref('')
 const loading = ref(false)
+
+const spaceNameTouched = ref(false)
+
+watch([username, preferredName], ([newUsername, newPreferredName]) => {
+  if (spaceNameTouched.value) return
+  const base = newPreferredName.trim() || newUsername.trim()
+  spaceName.value = base ? `${base}'s Space` : ''
+})
+
+function onSpaceNameInput() {
+  spaceNameTouched.value = true
+}
 
 async function onSubmit() {
   error.value = ''
   loading.value = true
+
   const { error: signUpError } = await supabase.auth.signUp({
-    email: email.value,
+    email: email.value.trim(),
     password: password.value,
+    options: {
+      data: {
+        username: username.value.trim(),
+        preferred_name: preferredName.value.trim() || null,
+        space_name: spaceName.value.trim(),
+      },
+    },
   })
+
   loading.value = false
   if (signUpError) {
     error.value = signUpError.message
@@ -31,12 +56,24 @@ async function onSubmit() {
       </template>
 
       <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-        <UFormField label="Email">
-          <UInput v-model="email" type="email" autocomplete="email" required class="w-full" />
+        <UFormField label="Username">
+          <UInput v-model="username" autocomplete="username" required class="w-full" />
+        </UFormField>
+
+        <UFormField label="Preferred Name (Display Name)" hint="Optional">
+          <UInput v-model="preferredName" autocomplete="nickname" class="w-full" />
+        </UFormField>
+
+        <UFormField label="Space Name">
+          <UInput v-model="spaceName" class="w-full" @input="onSpaceNameInput" />
         </UFormField>
 
         <UFormField label="Password">
           <UInput v-model="password" type="password" autocomplete="new-password" required class="w-full" />
+        </UFormField>
+
+        <UFormField label="Email">
+          <UInput v-model="email" type="email" autocomplete="email" required class="w-full" />
         </UFormField>
 
         <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
