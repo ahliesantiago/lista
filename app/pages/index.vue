@@ -1,13 +1,5 @@
 <script setup lang="ts">
-const supabase = useSupabaseClient()
-
-const { data: spaces } = await useAsyncData('my-spaces', async () => {
-  const { data, error } = await supabase.from('spaces').select('id, name').order('created_at')
-  if (error) throw error
-  return data
-})
-
-const currentSpace = computed(() => spaces.value?.[0])
+const { data: currentSpace } = await useCurrentSpace()
 </script>
 
 <template>

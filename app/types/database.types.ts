@@ -40,6 +40,159 @@ export type Database = {
   }
   public: {
     Tables: {
+      categories: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      item_tags: {
+        Row: {
+          item_id: string
+          tag_id: string
+        }
+        Insert: {
+          item_id: string
+          tag_id: string
+        }
+        Update: {
+          item_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_tags_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      item_units: {
+        Row: {
+          item_id: string
+          unit_id: string
+        }
+        Insert: {
+          item_id: string
+          unit_id: string
+        }
+        Update: {
+          item_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_units_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_units_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      items: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          default_unit_id: string | null
+          id: string
+          name: string
+          plural_name: string | null
+          price: number | null
+          space_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_unit_id?: string | null
+          id?: string
+          name: string
+          plural_name?: string | null
+          price?: number | null
+          space_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_unit_id?: string | null
+          id?: string
+          name?: string
+          plural_name?: string | null
+          price?: number | null
+          space_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "items_default_unit_id_fkey"
+            columns: ["default_unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "items_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       space_members: {
         Row: {
           created_at: string
@@ -92,6 +245,131 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      tags: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unit_conversions: {
+        Row: {
+          created_at: string
+          factor: number
+          from_unit_id: string
+          id: string
+          space_id: string
+          to_unit_id: string
+        }
+        Insert: {
+          created_at?: string
+          factor: number
+          from_unit_id: string
+          id?: string
+          space_id: string
+          to_unit_id: string
+        }
+        Update: {
+          created_at?: string
+          factor?: number
+          from_unit_id?: string
+          id?: string
+          space_id?: string
+          to_unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_conversions_from_unit_id_fkey"
+            columns: ["from_unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unit_conversions_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unit_conversions_to_unit_id_fkey"
+            columns: ["to_unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      units: {
+        Row: {
+          abbrev_plural: string | null
+          abbrev_singular: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name_plural: string
+          name_singular: string
+          space_id: string
+          unit_type: string
+        }
+        Insert: {
+          abbrev_plural?: string | null
+          abbrev_singular?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name_plural: string
+          name_singular: string
+          space_id: string
+          unit_type?: string
+        }
+        Update: {
+          abbrev_plural?: string | null
+          abbrev_singular?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name_plural?: string
+          name_singular?: string
+          space_id?: string
+          unit_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "units_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       users: {
         Row: {
