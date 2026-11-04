@@ -14,6 +14,7 @@ async function signOut() {
       <div class="flex items-center gap-6">
         <NuxtLink to="/" class="font-semibold">Lista</NuxtLink>
         <nav v-if="user" class="flex items-center gap-4 text-sm">
+          <NuxtLink to="/lists" class="hover:text-primary">Lists</NuxtLink>
           <NuxtLink to="/items" class="hover:text-primary">Items</NuxtLink>
           <NuxtLink to="/categories" class="hover:text-primary">Categories</NuxtLink>
           <NuxtLink to="/units" class="hover:text-primary">Units</NuxtLink>

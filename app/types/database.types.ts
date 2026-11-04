@@ -193,6 +193,142 @@ export type Database = {
           },
         ]
       }
+      list_items: {
+        Row: {
+          amount: number | null
+          created_at: string
+          id: string
+          is_done: boolean
+          item_id: string | null
+          list_id: string
+          name: string
+          size: string | null
+          unit_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          item_id?: string | null
+          list_id: string
+          name: string
+          size?: string | null
+          unit_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          item_id?: string | null
+          list_id?: string
+          name?: string
+          size?: string | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_items_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      list_tags: {
+        Row: {
+          list_id: string
+          tag_id: string
+        }
+        Insert: {
+          list_id: string
+          tag_id: string
+        }
+        Update: {
+          list_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_tags_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lists: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          space_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          space_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          space_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lists_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lists_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       space_members: {
         Row: {
           created_at: string
