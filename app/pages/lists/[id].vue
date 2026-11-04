@@ -119,6 +119,8 @@ async function onCreateListTag(searchTerm: string) {
 // --- add item ---
 
 const selectedItem = ref<Option | null>(null)
+const itemPickerOpen = ref(false)
+const itemPickerKey = ref(0)
 const addToMasterList = ref(true)
 const amount = ref<number | null>(null)
 const unitId = ref<string | null>(null)
@@ -127,8 +129,24 @@ const itemNotes = ref('')
 const error = ref('')
 const adding = ref(false)
 
+const unitOptionsForAmount = computed(
+  () =>
+    unitOptions.value?.map((u) => ({
+      ...u,
+      label: amount.value != null && amount.value !== 1 ? u.name_plural : u.name_singular,
+    })) ?? [],
+)
+const editUnitOptionsForAmount = computed(
+  () =>
+    unitOptions.value?.map((u) => ({
+      ...u,
+      label: editAmount.value != null && editAmount.value !== 1 ? u.name_plural : u.name_singular,
+    })) ?? [],
+)
+
 function onCreateItemOption(searchTerm: string) {
   selectedItem.value = { id: '', name: searchTerm }
+  itemPickerOpen.value = false
 }
 
 async function addItem() {
@@ -178,11 +196,14 @@ async function addItem() {
   }
 
   selectedItem.value = null
-  addToMasterList.value = true
   amount.value = null
   unitId.value = null
   size.value = ''
   itemNotes.value = ''
+  // force the item picker to remount: its internal search text doesn't
+  // reliably clear just from setting the external v-model to null,
+  // especially after the create-new-item path.
+  itemPickerKey.value++
   await refresh()
 }
 
@@ -257,37 +278,39 @@ async function deleteList() {
           class="mb-2 w-full text-lg font-semibold"
           @blur="saveListField({ name })"
         />
-        <UInput
+        <UTextarea
           v-model="description"
           placeholder="Description (optional)"
           class="mb-2 w-full"
           @blur="saveListField({ description: description || null })"
         />
-        <UTextarea
+        <UInput
           v-model="notes"
           placeholder="Notes (optional)"
           class="mb-2 w-full"
           @blur="saveListField({ notes: notes || null })"
         />
         <div class="flex gap-2">
-          <UInputMenu
-            v-model="categoryId"
-            :items="categoryOptions ?? []"
-            value-key="id"
-            label-key="name"
-            placeholder="Category"
-            class="flex-1"
-          />
-          <UInputMenu
-            v-model="listTags"
-            :items="tagOptions"
-            multiple
-            create-item
-            label-key="name"
-            placeholder="Tags"
-            class="flex-1"
-            @create="onCreateListTag"
-          />
+          <UFormField label="Category" hint="Optional" class="flex-1">
+            <UInputMenu
+              v-model="categoryId"
+              :items="categoryOptions ?? []"
+              value-key="id"
+              label-key="name"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="Tags" hint="Optional" class="flex-1">
+            <UInputMenu
+              v-model="listTags"
+              :items="tagOptions"
+              multiple
+              create-item
+              label-key="name"
+              class="w-full"
+              @create="onCreateListTag"
+            />
+          </UFormField>
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -306,7 +329,9 @@ async function deleteList() {
 
     <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addItem">
       <UInputMenu
+        :key="itemPickerKey"
         v-model="selectedItem"
+        v-model:open="itemPickerOpen"
         :items="itemOptions"
         create-item
         label-key="name"
@@ -314,14 +339,18 @@ async function deleteList() {
         class="w-full"
         @create="onCreateItemOption"
       />
-      <UCheckbox v-if="selectedItem && !selectedItem.id" v-model="addToMasterList" label="Add to master list" />
+      <UCheckbox
+        v-if="!selectedItem || !selectedItem.id"
+        v-model="addToMasterList"
+        label="Add to master list"
+      />
       <div class="grid grid-cols-3 gap-2">
         <UInputNumber v-model="amount" placeholder="Qty" :min="0" />
-        <UInputMenu
+        <USelectMenu
           v-model="unitId"
-          :items="unitOptions ?? []"
+          :items="unitOptionsForAmount"
           value-key="id"
-          label-key="name_singular"
+          label-key="label"
           :filter-fields="UNIT_FILTER_FIELDS"
           placeholder="Unit"
         />
@@ -341,7 +370,7 @@ async function deleteList() {
         <div v-if="editingItemId !== li.id" class="flex items-center justify-between">
           <label class="flex flex-1 items-center gap-3">
             <UCheckbox :model-value="li.is_done" @update:model-value="toggleDone(li.id, li.is_done)" />
-            <span :class="{ 'text-muted line-through': li.is_done }" class="cursor-pointer" @click="startEdit(li)">
+            <span :class="{ 'text-muted line-through': li.is_done }">
               {{ li.name }}
               <span v-if="li.amount != null" class="text-muted text-sm">
                 {{ li.amount }}<span v-if="li.unit">{{ ' ' + unitLabel(li.unit, li.amount) }}</span>
@@ -350,18 +379,21 @@ async function deleteList() {
               <span v-if="li.notes" class="text-muted block text-xs">{{ li.notes }}</span>
             </span>
           </label>
-          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeItem(li.id)" />
+          <div class="flex items-center gap-1">
+            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(li)" />
+            <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeItem(li.id)" />
+          </div>
         </div>
 
         <div v-else class="flex flex-col gap-2">
           <span class="font-medium">{{ li.name }}</span>
           <div class="grid grid-cols-3 gap-2">
             <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
-            <UInputMenu
+            <USelectMenu
               v-model="editUnitId"
-              :items="unitOptions ?? []"
+              :items="editUnitOptionsForAmount"
               value-key="id"
-              label-key="name_singular"
+              label-key="label"
               :filter-fields="UNIT_FILTER_FIELDS"
               placeholder="Unit"
             />

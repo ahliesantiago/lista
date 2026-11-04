@@ -31,11 +31,13 @@ async function createList() {
     .insert({ space_id: space.value.id, name: newName.value.trim() })
     .select('id')
     .single()
-  creating.value = false
   if (insertError || !data) {
+    creating.value = false
     error.value = insertError?.message ?? 'Failed to create list'
     return
   }
+  // leave `creating` true until navigation completes, so the button stays
+  // disabled for the whole transition instead of re-enabling momentarily
   await navigateTo(`/lists/${data.id}`)
 }
 
