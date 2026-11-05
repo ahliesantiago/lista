@@ -1,4 +1,5 @@
-
+Forgot your password? Reset it from the Dashboard: https://supabase.com/dashboard/project/yylifzyydtfuijrshhhs/settings/database
+Enter your database password: 
 export type Json =
   | string
   | number
@@ -40,6 +41,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      appliances: {
+        Row: {
+          brand: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          needs_maintenance: boolean
+          needs_replacement: boolean
+          notes: string | null
+          quantity: number
+          space_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          needs_maintenance?: boolean
+          needs_replacement?: boolean
+          notes?: string | null
+          quantity?: number
+          space_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          needs_maintenance?: boolean
+          needs_replacement?: boolean
+          notes?: string | null
+          quantity?: number
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appliances_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -400,6 +451,67 @@ export type Database = {
           },
         ]
       }
+      pantry_items: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          item_id: string
+          notes: string | null
+          quantity: number | null
+          stock_status: string | null
+          storage_location_id: string
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          item_id: string
+          notes?: string | null
+          quantity?: number | null
+          stock_status?: string | null
+          storage_location_id: string
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          item_id?: string
+          notes?: string | null
+          quantity?: number | null
+          stock_status?: string | null
+          storage_location_id?: string
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pantry_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       space_members: {
         Row: {
           created_at: string
@@ -452,6 +564,44 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      storage_locations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          room: string | null
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          room?: string | null
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          room?: string | null
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storage_locations_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tags: {
         Row: {
@@ -753,3 +903,5 @@ export const Constants = {
     Enums: {},
   },
 } as const
+A new version of Supabase CLI is available: v3.0.0 (currently installed v2.22.6)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
