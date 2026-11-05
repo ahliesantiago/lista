@@ -1,5 +1,6 @@
 <script setup lang="ts">
 type Option = { id: string; name: string }
+type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
   name_singular: string
@@ -8,6 +9,8 @@ type UnitOption = {
   abbrev_plural: string | null
 }
 const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
+const MAX_CATEGORIES = 2
+const MAX_SUBCATEGORIES = 2
 
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
@@ -17,7 +20,7 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
     .from('items')
     .select(`
       id, name, plural_name, price,
-      category:categories(id, name),
+      item_categories(categories(id, name, parent_id)),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
       item_tags(tags(id, name)),
       item_units(units(id, name_singular, name_plural, abbrev_singular, abbrev_plural))
@@ -31,12 +34,13 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
 const { data: categoryOptions } = await useAsyncData('category-options', async () => {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, name')
+    .select('id, name, parent_id')
     .is('deleted_at', null)
     .order('name')
   if (error) throw error
-  return data
+  return data as CategoryOption[]
 })
+const topLevelCategoryOptions = computed(() => categoryOptions.value?.filter((c) => !c.parent_id) ?? [])
 
 const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   const { data, error } = await supabase
@@ -65,22 +69,60 @@ const editingId = ref<string | null>(null)
 const name = ref('')
 const pluralName = ref('')
 const price = ref<number | null>(null)
-const categoryId = ref<string | null>(null)
+const selectedCategories = ref<CategoryOption[]>([])
+const selectedSubcategories = ref<CategoryOption[]>([])
 const defaultUnitId = ref<string | null>(null)
 const selectedUnits = ref<UnitOption[]>([])
 const selectedTags = ref<Option[]>([])
 const error = ref('')
 const saving = ref(false)
 
+// a unit a item stays linked to can be trashed (soft delete never touches
+// the link - only a permanent delete does, via the FK). The picker options
+// are live-only, so without this the picker can't find a label for the
+// current value and falls back to showing the raw id. Categories don't need
+// this: they're a multi-select of whole objects now, so chips render from
+// the bound objects directly rather than being re-resolved from :items.
+const extraDefaultUnitOption = ref<{ id: string; name_singular: string } | null>(null)
+const defaultUnitOptionsForForm = computed(() => {
+  const base = unitOptions.value ?? []
+  const extra = extraDefaultUnitOption.value
+  return extra && !base.some((u) => u.id === extra.id) ? [...base, extra] : base
+})
+
+const subcategoryOptions = computed(() => {
+  const parentIds = new Set(selectedCategories.value.map((c) => c.id))
+  return categoryOptions.value?.filter((c) => c.parent_id && parentIds.has(c.parent_id)) ?? []
+})
+
+watch(selectedCategories, (val) => {
+  if (val.length > MAX_CATEGORIES) {
+    selectedCategories.value = val.slice(0, MAX_CATEGORIES)
+    return
+  }
+  const parentIds = new Set(val.map((c) => c.id))
+  selectedSubcategories.value = selectedSubcategories.value.filter(
+    (s) => s.parent_id && parentIds.has(s.parent_id),
+  )
+})
+
+watch(selectedSubcategories, (val) => {
+  if (val.length > MAX_SUBCATEGORIES) {
+    selectedSubcategories.value = val.slice(0, MAX_SUBCATEGORIES)
+  }
+})
+
 function resetForm() {
   editingId.value = null
   name.value = ''
   pluralName.value = ''
   price.value = null
-  categoryId.value = null
+  selectedCategories.value = []
+  selectedSubcategories.value = []
   defaultUnitId.value = null
   selectedUnits.value = []
   selectedTags.value = []
+  extraDefaultUnitOption.value = null
   error.value = ''
 }
 
@@ -94,8 +136,11 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   name.value = item.name
   pluralName.value = item.plural_name ?? ''
   price.value = item.price
-  categoryId.value = item.category?.id ?? null
+  const linkedCategories = item.item_categories.map((ic) => ic.categories!)
+  selectedCategories.value = linkedCategories.filter((c) => !c.parent_id)
+  selectedSubcategories.value = linkedCategories.filter((c) => c.parent_id)
   defaultUnitId.value = item.default_unit?.id ?? null
+  extraDefaultUnitOption.value = item.default_unit ?? null
   selectedUnits.value = item.item_units.map((iu) => iu.units!)
   selectedTags.value = item.item_tags.map((it) => ({ id: it.tags!.id, name: it.tags!.name }))
   error.value = ''
@@ -123,7 +168,6 @@ async function save() {
     space_id: space.value.id,
     name: name.value.trim(),
     plural_name: pluralName.value.trim() || null,
-    category_id: categoryId.value,
     default_unit_id: defaultUnitId.value,
     price: price.value,
   }
@@ -138,6 +182,7 @@ async function save() {
     }
     await supabase.from('item_tags').delete().eq('item_id', itemId)
     await supabase.from('item_units').delete().eq('item_id', itemId)
+    await supabase.from('item_categories').delete().eq('item_id', itemId)
   } else {
     const { data, error: insertError } = await supabase.from('items').insert(payload).select('id').single()
     if (insertError || !data) {
@@ -154,6 +199,12 @@ async function save() {
   if (selectedUnits.value.length > 0) {
     await supabase.from('item_units').insert(selectedUnits.value.map((u) => ({ item_id: itemId, unit_id: u.id })))
   }
+  const allCategories = [...selectedCategories.value, ...selectedSubcategories.value]
+  if (allCategories.length > 0) {
+    await supabase
+      .from('item_categories')
+      .insert(allCategories.map((c) => ({ item_id: itemId, category_id: c.id })))
+  }
 
   saving.value = false
   slideoverOpen.value = false
@@ -161,6 +212,10 @@ async function save() {
 }
 
 async function deleteItem(id: string) {
+  // soft delete only: anything referencing this item keeps the link intact,
+  // so restoring it from Trash brings the link right back. Permanently
+  // deleting it (a real DELETE, from the Trash page) is what triggers the
+  // FK's on-delete-set-null, not this.
   await supabase.from('items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
@@ -184,9 +239,17 @@ async function deleteItem(id: string) {
       >
         <div>
           <span class="font-medium">{{ item.name }}</span>
-          <span v-if="item.category" class="text-muted ml-2 text-sm">{{ item.category.name }}</span>
           <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
-          <UBadge v-for="t in item.item_tags" :key="t.tags!.id" size="sm" variant="subtle" class="ml-2">
+          <UBadge
+            v-for="ic in item.item_categories"
+            :key="ic.categories!.id"
+            size="sm"
+            :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+            class="ml-2"
+          >
+            {{ ic.categories!.name }}
+          </UBadge>
+          <UBadge v-for="t in item.item_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
             {{ t.tags!.name }}
           </UBadge>
         </div>
@@ -212,12 +275,23 @@ async function deleteItem(id: string) {
             <UInput v-model="pluralName" class="w-full" />
           </UFormField>
 
-          <UFormField label="Category" hint="Optional">
+          <UFormField label="Categories" hint="Optional, up to 2">
             <UInputMenu
-              v-model="categoryId"
-              :items="categoryOptions ?? []"
-              value-key="id"
+              v-model="selectedCategories"
+              :items="topLevelCategoryOptions"
+              multiple
               label-key="name"
+              class="w-full"
+            />
+          </UFormField>
+
+          <UFormField label="Subcategories" hint="Optional, up to 2">
+            <UInputMenu
+              v-model="selectedSubcategories"
+              :items="subcategoryOptions"
+              multiple
+              label-key="name"
+              placeholder="Pick a category first"
               class="w-full"
             />
           </UFormField>
@@ -229,7 +303,7 @@ async function deleteItem(id: string) {
           <UFormField label="Default Unit" hint="Optional">
             <UInputMenu
               v-model="defaultUnitId"
-              :items="unitOptions ?? []"
+              :items="defaultUnitOptionsForForm"
               value-key="id"
               label-key="name_singular"
               :filter-fields="UNIT_FILTER_FIELDS"

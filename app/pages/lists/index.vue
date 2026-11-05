@@ -7,7 +7,7 @@ const { data: lists, refresh } = await useAsyncData('lists', async () => {
     .from('lists')
     .select(`
       id, name, status,
-      category:categories(id, name),
+      list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
     .is('deleted_at', null)
@@ -91,8 +91,16 @@ async function deleteList(id: string) {
       >
         <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
           <span class="font-medium">{{ list.name }}</span>
-          <span v-if="list.category" class="text-muted ml-2 text-sm">{{ list.category.name }}</span>
-          <UBadge v-for="t in list.list_tags" :key="t.tags!.id" size="sm" variant="subtle" class="ml-2">
+          <UBadge
+            v-for="lc in list.list_categories"
+            :key="lc.categories!.id"
+            size="sm"
+            :variant="lc.categories!.parent_id ? 'subtle' : 'solid'"
+            class="ml-2"
+          >
+            {{ lc.categories!.name }}
+          </UBadge>
+          <UBadge v-for="t in list.list_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
             {{ t.tags!.name }}
           </UBadge>
         </NuxtLink>

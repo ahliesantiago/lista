@@ -48,7 +48,47 @@ async function addUnit() {
 }
 
 async function deleteUnit(id: string) {
+  // soft delete only: anything referencing this unit keeps the link intact,
+  // so restoring it from Trash brings the link right back. Permanently
+  // deleting it (a real DELETE, from the Trash page) is what triggers the
+  // FK's on-delete-set-null/cascade, not this.
   await supabase.from('units').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  await refresh()
+}
+
+type Unit = NonNullable<typeof units.value>[number]
+const editingId = ref<string | null>(null)
+const editNameSingular = ref('')
+const editNamePlural = ref('')
+const editAbbrevSingular = ref('')
+const editAbbrevPlural = ref('')
+const editUnitType = ref<typeof UNIT_TYPES[number]>('other')
+
+function startEdit(unit: Unit) {
+  editingId.value = unit.id
+  editNameSingular.value = unit.name_singular
+  editNamePlural.value = unit.name_plural
+  editAbbrevSingular.value = unit.abbrev_singular ?? ''
+  editAbbrevPlural.value = unit.abbrev_plural ?? ''
+  editUnitType.value = unit.unit_type as typeof UNIT_TYPES[number]
+}
+
+function cancelEdit() {
+  editingId.value = null
+}
+
+async function saveEdit(id: string) {
+  await supabase
+    .from('units')
+    .update({
+      name_singular: editNameSingular.value.trim(),
+      name_plural: editNamePlural.value.trim(),
+      abbrev_singular: editAbbrevSingular.value.trim() || null,
+      abbrev_plural: editAbbrevPlural.value.trim() || null,
+      unit_type: editUnitType.value,
+    })
+    .eq('id', id)
+  editingId.value = null
   await refresh()
 }
 </script>
@@ -72,14 +112,30 @@ async function deleteUnit(id: string) {
       <li
         v-for="unit in units"
         :key="unit.id"
-        class="flex items-center justify-between rounded border border-default px-3 py-2"
+        class="rounded border border-default px-3 py-2"
       >
-        <span>
-          {{ unit.name_singular }} / {{ unit.name_plural }}
-          <span v-if="unit.abbrev_singular" class="text-muted">({{ unit.abbrev_singular }})</span>
-          <UBadge size="sm" variant="subtle" class="ml-2">{{ unit.unit_type }}</UBadge>
-        </span>
-        <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="deleteUnit(unit.id)" />
+        <div v-if="editingId !== unit.id" class="flex items-center justify-between">
+          <span>
+            {{ unit.name_singular }} / {{ unit.name_plural }}
+            <span v-if="unit.abbrev_singular" class="text-muted">({{ unit.abbrev_singular }})</span>
+            <UBadge size="sm" variant="subtle" class="ml-2">{{ unit.unit_type }}</UBadge>
+          </span>
+          <div class="flex gap-1">
+            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(unit)" />
+            <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="deleteUnit(unit.id)" />
+          </div>
+        </div>
+        <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <UInput v-model="editNameSingular" placeholder="Singular (cup)" />
+          <UInput v-model="editNamePlural" placeholder="Plural (cups)" />
+          <UInput v-model="editAbbrevSingular" placeholder="Abbrev. (c)" />
+          <UInput v-model="editAbbrevPlural" placeholder="Abbrev. plural" />
+          <USelect v-model="editUnitType" :items="UNIT_TYPES" />
+          <div class="col-span-2 flex gap-2 sm:col-span-5">
+            <UButton size="sm" @click="saveEdit(unit.id)">Save</UButton>
+            <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
+          </div>
+        </div>
       </li>
       <li v-if="units && units.length === 0" class="text-muted text-sm">No units yet.</li>
     </ul>

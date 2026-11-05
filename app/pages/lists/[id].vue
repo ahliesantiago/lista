@@ -1,5 +1,6 @@
 <script setup lang="ts">
 type Option = { id: string; name: string }
+type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
   name_singular: string
@@ -20,7 +21,7 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
     .from('lists')
     .select(`
       id, name, description, notes, status,
-      category:categories(id, name),
+      list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
     .eq('id', listId)
@@ -64,12 +65,13 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
 const { data: categoryOptions } = await useAsyncData('category-options', async () => {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, name')
+    .select('id, name, parent_id')
     .is('deleted_at', null)
     .order('name')
   if (error) throw error
-  return data
+  return data as CategoryOption[]
 })
+const topLevelCategoryOptions = computed(() => categoryOptions.value?.filter((c) => !c.parent_id) ?? [])
 
 const tagOptions = ref<Option[]>([])
 const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
@@ -89,15 +91,54 @@ function unitLabel(unit: { name_singular: string; name_plural: string } | null, 
 const name = ref(list.value?.name ?? '')
 const description = ref(list.value?.description ?? '')
 const notes = ref(list.value?.notes ?? '')
-const categoryId = ref<string | null>(list.value?.category?.id ?? null)
+const linkedCategories = list.value?.list_categories.map((lc) => lc.categories!) ?? []
+const MAX_CATEGORIES = 2
+const MAX_SUBCATEGORIES = 2
+const selectedCategories = ref<CategoryOption[]>(linkedCategories.filter((c) => !c.parent_id))
+const selectedSubcategories = ref<CategoryOption[]>(linkedCategories.filter((c) => c.parent_id))
 const listTags = ref<Option[]>(list.value?.list_tags.map((lt) => lt.tags!) ?? [])
+
+const subcategoryOptions = computed(() => {
+  const parentIds = new Set(selectedCategories.value.map((c) => c.id))
+  return categoryOptions.value?.filter((c) => c.parent_id && parentIds.has(c.parent_id)) ?? []
+})
 
 async function saveListField(patch: Record<string, unknown>) {
   await supabase.from('lists').update(patch).eq('id', listId)
 }
 
-watch(categoryId, (val) => {
-  saveListField({ category_id: val })
+watch(selectedCategories, async (newVal, oldVal) => {
+  if (newVal.length > MAX_CATEGORIES) {
+    selectedCategories.value = newVal.slice(0, MAX_CATEGORIES)
+    return
+  }
+  const parentIds = new Set(newVal.map((c) => c.id))
+  selectedSubcategories.value = selectedSubcategories.value.filter(
+    (s) => s.parent_id && parentIds.has(s.parent_id),
+  )
+  const added = newVal.filter((c) => !oldVal.some((o) => o.id === c.id))
+  const removed = oldVal.filter((o) => !newVal.some((c) => c.id === o.id))
+  if (added.length > 0) {
+    await supabase.from('list_categories').insert(added.map((c) => ({ list_id: listId, category_id: c.id })))
+  }
+  for (const r of removed) {
+    await supabase.from('list_categories').delete().eq('list_id', listId).eq('category_id', r.id)
+  }
+})
+
+watch(selectedSubcategories, async (newVal, oldVal) => {
+  if (newVal.length > MAX_SUBCATEGORIES) {
+    selectedSubcategories.value = newVal.slice(0, MAX_SUBCATEGORIES)
+    return
+  }
+  const added = newVal.filter((c) => !oldVal.some((o) => o.id === c.id))
+  const removed = oldVal.filter((o) => !newVal.some((c) => c.id === o.id))
+  if (added.length > 0) {
+    await supabase.from('list_categories').insert(added.map((c) => ({ list_id: listId, category_id: c.id })))
+  }
+  for (const r of removed) {
+    await supabase.from('list_categories').delete().eq('list_id', listId).eq('category_id', r.id)
+  }
 })
 
 watch(listTags, async (newVal, oldVal) => {
@@ -143,13 +184,20 @@ const unitOptionsForAmount = computed(
       label: amount.value != null && amount.value !== 1 ? u.name_plural : u.name_singular,
     })) ?? [],
 )
-const editUnitOptionsForAmount = computed(
-  () =>
-    unitOptions.value?.map((u) => ({
-      ...u,
-      label: editAmount.value != null && editAmount.value !== 1 ? u.name_plural : u.name_singular,
-    })) ?? [],
-)
+// the list item can stay linked to a trashed unit (soft delete never
+// touches the link); without this, re-opening it for edit would have no
+// live option to resolve a label from and fall back to showing the raw id.
+const extraEditUnitOption = ref<{ id: string; name_singular: string; name_plural: string } | null>(null)
+const editUnitOptionsForAmount = computed(() => {
+  const label = (u: { name_singular: string; name_plural: string }) =>
+    editAmount.value != null && editAmount.value !== 1 ? u.name_plural : u.name_singular
+  const base = unitOptions.value?.map((u) => ({ ...u, label: label(u) })) ?? []
+  const extra = extraEditUnitOption.value
+  if (extra && !base.some((u) => u.id === extra.id)) {
+    return [...base, { ...extra, abbrev_singular: null, abbrev_plural: null, label: label(extra) }]
+  }
+  return base
+})
 
 function onCreateItemOption(searchTerm: string) {
   selectedItem.value = { id: '', name: searchTerm }
@@ -241,6 +289,7 @@ function startEdit(li: NonNullable<typeof listItems.value>[number]) {
   editingItemId.value = li.id
   editAmount.value = li.amount
   editUnitId.value = li.unit?.id ?? null
+  extraEditUnitOption.value = li.unit ?? null
   editSize.value = li.size ?? ''
   editNotes.value = li.notes ?? ''
 }
@@ -299,28 +348,38 @@ async function deleteList() {
           class="mb-2 w-full"
           @blur="saveListField({ notes: notes || null })"
         />
-        <div class="flex gap-2">
-          <UFormField label="Category" hint="Optional" class="flex-1">
+        <div class="mb-2 flex gap-2">
+          <UFormField label="Categories" hint="Up to 2 (optional)" class="flex-1">
             <UInputMenu
-              v-model="categoryId"
-              :items="categoryOptions ?? []"
-              value-key="id"
+              v-model="selectedCategories"
+              :items="topLevelCategoryOptions"
+              multiple
               label-key="name"
               class="w-full"
             />
           </UFormField>
-          <UFormField label="Tags" hint="Optional" class="flex-1">
+          <UFormField label="Subcategories" hint="Up to 2 (optional)" class="flex-1">
             <UInputMenu
-              v-model="listTags"
-              :items="tagOptions"
+              v-model="selectedSubcategories"
+              :items="subcategoryOptions"
               multiple
-              create-item
               label-key="name"
+              placeholder="Pick a category first"
               class="w-full"
-              @create="onCreateListTag"
             />
           </UFormField>
         </div>
+        <UFormField label="Tags" hint="Optional">
+          <UInputMenu
+            v-model="listTags"
+            :items="tagOptions"
+            multiple
+            create-item
+            label-key="name"
+            class="w-full"
+            @create="onCreateListTag"
+          />
+        </UFormField>
       </div>
       <div class="flex shrink-0 items-center gap-2">
         <UButton v-if="list.status === 'active'" size="sm" variant="outline" @click="setStatus('archived')">

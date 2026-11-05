@@ -47,6 +47,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          parent_id: string | null
           space_id: string
         }
         Insert: {
@@ -55,6 +56,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          parent_id?: string | null
           space_id: string
         }
         Update: {
@@ -63,14 +65,52 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
           space_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "categories_space_id_fkey"
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      item_categories: {
+        Row: {
+          category_id: string
+          item_id: string
+        }
+        Insert: {
+          category_id: string
+          item_id: string
+        }
+        Update: {
+          category_id?: string
+          item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_categories_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
             referencedColumns: ["id"]
           },
         ]
@@ -137,7 +177,6 @@ export type Database = {
       }
       items: {
         Row: {
-          category_id: string | null
           created_at: string
           created_by: string | null
           default_unit_id: string | null
@@ -150,7 +189,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          category_id?: string | null
           created_at?: string
           created_by?: string | null
           default_unit_id?: string | null
@@ -163,7 +201,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          category_id?: string | null
           created_at?: string
           created_by?: string | null
           default_unit_id?: string | null
@@ -177,13 +214,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "items_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "items_default_unit_id_fkey"
             columns: ["default_unit_id"]
             isOneToOne: false
@@ -195,6 +225,36 @@ export type Database = {
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      list_categories: {
+        Row: {
+          category_id: string
+          list_id: string
+        }
+        Insert: {
+          category_id: string
+          list_id: string
+        }
+        Update: {
+          category_id?: string
+          list_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_categories_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "lists"
             referencedColumns: ["id"]
           },
         ]
@@ -295,7 +355,6 @@ export type Database = {
       }
       lists: {
         Row: {
-          category_id: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -308,7 +367,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          category_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -321,7 +379,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          category_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -334,13 +391,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "lists_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "lists_space_id_fkey"
             columns: ["space_id"]
