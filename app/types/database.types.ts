@@ -578,6 +578,41 @@ export type Database = {
           },
         ]
       }
+      rooms: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rooms_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       space_members: {
         Row: {
           created_at: string
@@ -638,7 +673,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
-          room: string | null
+          room_id: string | null
           space_id: string
         }
         Insert: {
@@ -647,7 +682,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
-          room?: string | null
+          room_id?: string | null
           space_id: string
         }
         Update: {
@@ -656,10 +691,17 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
-          room?: string | null
+          room_id?: string | null
           space_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "storage_locations_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "storage_locations_space_id_fkey"
             columns: ["space_id"]

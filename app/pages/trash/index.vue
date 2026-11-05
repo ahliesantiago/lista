@@ -88,7 +88,17 @@ const {
 } = await useAsyncData('trash-storage-locations', async () => {
   const { data, error } = await supabase
     .from('storage_locations')
-    .select('id, name, room, deleted_at')
+    .select('id, name, deleted_at, room:rooms(name)')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
+const { data: rooms, error: roomsError, refresh: refreshRooms } = await useAsyncData('trash-rooms', async () => {
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('id, name, deleted_at')
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false })
   if (error) throw error
@@ -185,6 +195,7 @@ async function refreshAll() {
     refreshLists(),
     refreshListItems(),
     refreshStorageLocations(),
+    refreshRooms(),
     refreshInventoryItems(),
     refreshAppliances(),
     refreshFurniture(),
@@ -221,8 +232,9 @@ async function refreshAll() {
         table: 'storage_locations',
         rows: storageLocations,
         error: storageLocationsError,
-        display: (r: any) => `${r.name}${r.room ? ' (' + r.room + ')' : ''}`,
+        display: (r: any) => `${r.name}${r.room ? ' (' + r.room.name + ')' : ''}`,
       },
+      { label: 'Rooms', table: 'rooms', rows: rooms, error: roomsError, display: (r: any) => r.name },
       {
         label: 'Inventory Items',
         table: 'inventory_items',

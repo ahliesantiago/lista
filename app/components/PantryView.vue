@@ -36,7 +36,7 @@ const { data: inventoryItems, refresh } = await useAsyncData(`inventory-items-${
     .from('inventory_items')
     .select(`
       id, stock_status, quantity, notes,
-      storage_location:storage_locations(id, name, room),
+      storage_location:storage_locations(id, name, room:rooms(id, name)),
       item:items(id, name, item_categories(categories(id, name, parent_id))),
       unit:units(id, name_singular, name_plural)
     `)
@@ -50,15 +50,17 @@ const { data: inventoryItems, refresh } = await useAsyncData(`inventory-items-${
 const { data: locationOptionsInitial } = await useAsyncData('pantry-location-options', async () => {
   const { data, error } = await supabase
     .from('storage_locations')
-    .select('id, name, room')
+    .select('id, name, room:rooms(id, name)')
     .is('deleted_at', null)
-    .order('room')
     .order('name')
   if (error) throw error
   return data
 })
 const locationOptionsForPicker = computed(() =>
-  (locationOptionsInitial.value ?? []).map((l) => ({ ...l, label: l.room ? `${l.name} (${l.room})` : l.name })),
+  (locationOptionsInitial.value ?? []).map((l) => ({
+    ...l,
+    label: l.room ? `${l.name} (${l.room.name})` : l.name,
+  })),
 )
 
 const itemOptions = ref<Option[]>([])
@@ -100,7 +102,7 @@ function unitLabel(unit: { name_singular: string; name_plural: string } | null, 
 const groupedItems = computed(() => {
   const roomMap = new Map<string, Map<string, InventoryItem[]>>()
   for (const p of inventoryItems.value ?? []) {
-    const roomLabel = p.storage_location ? p.storage_location.room || 'Other' : 'Unassigned'
+    const roomLabel = p.storage_location ? p.storage_location.room?.name || 'Other' : 'Unassigned'
     const locName = p.storage_location ? p.storage_location.name : 'No location set'
     if (!roomMap.has(roomLabel)) roomMap.set(roomLabel, new Map())
     const locMap = roomMap.get(roomLabel)!

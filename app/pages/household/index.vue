@@ -1,13 +1,13 @@
 <script setup lang="ts">
 const sections = [
   { label: 'Pantry', description: 'Food stock by storage location.', to: '/pantry' },
-  { label: 'Appliances', description: 'Brand, quantity, maintenance/replacement flags.', to: '/appliances' },
-  { label: 'Furniture', description: 'Brand, room, quantity, maintenance/replacement flags.', to: '/furniture' },
   {
     label: 'Home Inventory',
     description: 'Linens, toilet paper, cleaning supplies, and other non-food stock.',
     to: '/home-inventory',
   },
+  { label: 'Appliances', description: 'Brand, quantity, maintenance/replacement flags.', to: '/appliances' },
+  { label: 'Furniture', description: 'Brand, room, quantity, maintenance/replacement flags.', to: '/furniture' },
 ]
 </script>
 
