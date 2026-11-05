@@ -6,6 +6,7 @@ const { data: units, refresh } = await useAsyncData('units', async () => {
   const { data, error } = await supabase
     .from('units')
     .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural, unit_type')
+    .is('deleted_at', null)
     .order('name_singular')
   if (error) throw error
   return data
@@ -47,7 +48,7 @@ async function addUnit() {
 }
 
 async function deleteUnit(id: string) {
-  await supabase.from('units').delete().eq('id', id)
+  await supabase.from('units').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
 </script>

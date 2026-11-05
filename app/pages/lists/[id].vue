@@ -24,6 +24,7 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
       list_tags(tags(id, name))
     `)
     .eq('id', listId)
+    .is('deleted_at', null)
     .single()
   if (error) throw error
   return data
@@ -37,13 +38,14 @@ const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, 
       unit:units!list_items_unit_id_fkey(id, name_singular, name_plural)
     `)
     .eq('list_id', listId)
+    .is('deleted_at', null)
     .order('created_at')
   if (error) throw error
   return data
 })
 
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
-  const { data, error } = await supabase.from('items').select('id, name').order('name')
+  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
   if (error) throw error
   return data
 })
@@ -53,20 +55,25 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   const { data, error } = await supabase
     .from('units')
     .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
+    .is('deleted_at', null)
     .order('name_singular')
   if (error) throw error
   return data as UnitOption[]
 })
 
 const { data: categoryOptions } = await useAsyncData('category-options', async () => {
-  const { data, error } = await supabase.from('categories').select('id, name').order('name')
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
 
 const tagOptions = ref<Option[]>([])
 const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
-  const { data, error } = await supabase.from('tags').select('id, name').order('name')
+  const { data, error } = await supabase.from('tags').select('id, name').is('deleted_at', null).order('name')
   if (error) throw error
   return data
 })
@@ -218,7 +225,7 @@ async function checkAll(done: boolean) {
 }
 
 async function removeItem(id: string) {
-  await supabase.from('list_items').delete().eq('id', id)
+  await supabase.from('list_items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
 
@@ -264,7 +271,9 @@ async function setStatus(status: 'active' | 'archived') {
 }
 
 async function deleteList() {
-  await supabase.from('lists').delete().eq('id', listId)
+  const deletedAt = new Date().toISOString()
+  await supabase.from('lists').update({ deleted_at: deletedAt }).eq('id', listId)
+  await supabase.from('list_items').update({ deleted_at: deletedAt }).eq('list_id', listId).is('deleted_at', null)
   await navigateTo('/lists')
 }
 </script>

@@ -10,6 +10,7 @@ const { data: lists, refresh } = await useAsyncData('lists', async () => {
       category:categories(id, name),
       list_tags(tags(id, name))
     `)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -47,7 +48,9 @@ async function setStatus(id: string, status: 'active' | 'archived') {
 }
 
 async function deleteList(id: string) {
-  await supabase.from('lists').delete().eq('id', id)
+  const deletedAt = new Date().toISOString()
+  await supabase.from('lists').update({ deleted_at: deletedAt }).eq('id', id)
+  await supabase.from('list_items').update({ deleted_at: deletedAt }).eq('list_id', id).is('deleted_at', null)
   await refresh()
 }
 </script>

@@ -3,7 +3,11 @@ const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
 
 const { data: categories, refresh } = await useAsyncData('categories', async () => {
-  const { data, error } = await supabase.from('categories').select('id, name').order('name')
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -29,7 +33,7 @@ async function addCategory() {
 }
 
 async function deleteCategory(id: string) {
-  await supabase.from('categories').delete().eq('id', id)
+  await supabase.from('categories').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
 </script>

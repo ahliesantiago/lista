@@ -44,6 +44,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           id: string
           name: string
           space_id: string
@@ -51,6 +52,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name: string
           space_id: string
@@ -58,6 +60,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name?: string
           space_id?: string
@@ -138,6 +141,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           default_unit_id: string | null
+          deleted_at: string | null
           id: string
           name: string
           plural_name: string | null
@@ -150,6 +154,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_unit_id?: string | null
+          deleted_at?: string | null
           id?: string
           name: string
           plural_name?: string | null
@@ -162,6 +167,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_unit_id?: string | null
+          deleted_at?: string | null
           id?: string
           name?: string
           plural_name?: string | null
@@ -197,6 +203,7 @@ export type Database = {
         Row: {
           amount: number | null
           created_at: string
+          deleted_at: string | null
           id: string
           is_done: boolean
           item_id: string | null
@@ -209,6 +216,7 @@ export type Database = {
         Insert: {
           amount?: number | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_done?: boolean
           item_id?: string | null
@@ -221,6 +229,7 @@ export type Database = {
         Update: {
           amount?: number | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_done?: boolean
           item_id?: string | null
@@ -289,6 +298,7 @@ export type Database = {
           category_id: string | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           description: string | null
           id: string
           name: string
@@ -301,6 +311,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           name: string
@@ -313,6 +324,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           name?: string
@@ -395,6 +407,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           id: string
           name: string
           space_id: string
@@ -402,6 +415,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name: string
           space_id: string
@@ -409,6 +423,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name?: string
           space_id?: string
@@ -478,6 +493,7 @@ export type Database = {
           abbrev_singular: string | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           id: string
           name_plural: string
           name_singular: string
@@ -489,6 +505,7 @@ export type Database = {
           abbrev_singular?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name_plural: string
           name_singular: string
@@ -500,6 +517,7 @@ export type Database = {
           abbrev_singular?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           name_plural?: string
           name_singular?: string

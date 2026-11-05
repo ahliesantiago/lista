@@ -2,6 +2,14 @@
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
+const { data: username } = await useAsyncData('current-username', async () => {
+  if (!user.value) return null
+  const { data } = await supabase.from('users').select('username').eq('id', user.value.id).single()
+  return data?.username ?? null
+})
+
+const userMenuItems = [[{ label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }]]
+
 async function signOut() {
   await supabase.auth.signOut()
   await navigateTo('/login')
@@ -21,7 +29,11 @@ async function signOut() {
         </nav>
       </div>
       <div v-if="user" class="flex items-center gap-3">
-        <span class="text-sm text-muted">{{ user.email }}</span>
+        <UDropdownMenu :items="userMenuItems">
+          <UButton variant="ghost" size="sm" trailing-icon="i-lucide-chevron-down">
+            {{ username ?? user.email }}
+          </UButton>
+        </UDropdownMenu>
         <UButton size="sm" variant="outline" @click="signOut">Sign out</UButton>
       </div>
     </header>

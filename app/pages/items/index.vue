@@ -22,13 +22,18 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
       item_tags(tags(id, name)),
       item_units(units(id, name_singular, name_plural, abbrev_singular, abbrev_plural))
     `)
+    .is('deleted_at', null)
     .order('name')
   if (error) throw error
   return data
 })
 
 const { data: categoryOptions } = await useAsyncData('category-options', async () => {
-  const { data, error } = await supabase.from('categories').select('id, name').order('name')
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -37,6 +42,7 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   const { data, error } = await supabase
     .from('units')
     .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
+    .is('deleted_at', null)
     .order('name_singular')
   if (error) throw error
   return data as UnitOption[]
@@ -44,7 +50,11 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
 
 const tagOptions = ref<Option[]>([])
 const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
-  const { data, error } = await supabase.from('tags').select('id, name').order('name')
+  const { data, error } = await supabase
+    .from('tags')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -151,7 +161,7 @@ async function save() {
 }
 
 async function deleteItem(id: string) {
-  await supabase.from('items').delete().eq('id', id)
+  await supabase.from('items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
 </script>
