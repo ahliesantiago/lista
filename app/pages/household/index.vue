@@ -1,0 +1,32 @@
+<script setup lang="ts">
+const sections = [
+  { label: 'Pantry', description: 'Food stock by storage location.', to: '/pantry' },
+  { label: 'Appliances', description: 'Brand, quantity, maintenance/replacement flags.', to: '/appliances' },
+  { label: 'Furniture', description: 'Brand, room, quantity, maintenance/replacement flags.', to: '/furniture' },
+  {
+    label: 'Home Inventory',
+    description: 'Linens, toilet paper, cleaning supplies, and other non-food stock.',
+    to: '/home-inventory',
+  },
+]
+</script>
+
+<template>
+  <div class="mx-auto max-w-2xl">
+    <h1 class="mb-6 text-xl font-semibold">Household</h1>
+
+    <div class="flex flex-col gap-4">
+      <div
+        v-for="section in sections"
+        :key="section.to"
+        class="flex items-center justify-between rounded border border-default px-4 py-3"
+      >
+        <div>
+          <h2 class="font-medium">{{ section.label }}</h2>
+          <p class="text-muted text-sm">{{ section.description }}</p>
+        </div>
+        <UButton :to="section.to" variant="outline">Go to {{ section.label }}</UButton>
+      </div>
+    </div>
+  </div>
+</template>

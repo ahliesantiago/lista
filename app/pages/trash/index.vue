@@ -96,14 +96,14 @@ const {
 })
 
 const {
-  data: pantryItems,
-  error: pantryItemsError,
-  refresh: refreshPantryItems,
-} = await useAsyncData('trash-pantry-items', async () => {
+  data: inventoryItems,
+  error: inventoryItemsError,
+  refresh: refreshInventoryItems,
+} = await useAsyncData('trash-inventory-items', async () => {
   const { data, error } = await supabase
-    .from('pantry_items')
+    .from('inventory_items')
     .select(
-      'id, deleted_at, storage_location_id, item:items(name), storage_location:storage_locations(id, name, deleted_at)',
+      'id, deleted_at, kind, storage_location_id, item:items(name), storage_location:storage_locations(id, name, deleted_at)',
     )
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false })
@@ -118,6 +118,20 @@ const {
 } = await useAsyncData('trash-appliances', async () => {
   const { data, error } = await supabase
     .from('appliances')
+    .select('id, name, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
+const {
+  data: furniture,
+  error: furnitureError,
+  refresh: refreshFurniture,
+} = await useAsyncData('trash-furniture', async () => {
+  const { data, error } = await supabase
+    .from('furniture')
     .select('id, name, deleted_at')
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false })
@@ -145,12 +159,12 @@ async function restore(table: string, row: Record<string, any>) {
   } else if (table === 'storage_locations') {
     // mirrors the lists -> list_items cascade above
     await supabase
-      .from('pantry_items')
+      .from('inventory_items')
       .update({ deleted_at: null })
       .eq('storage_location_id', row.id)
       .not('deleted_at', 'is', null)
-    await refreshPantryItems()
-  } else if (table === 'pantry_items' && row.storage_location?.deleted_at) {
+    await refreshInventoryItems()
+  } else if (table === 'inventory_items' && row.storage_location?.deleted_at) {
     await supabase.from('storage_locations').update({ deleted_at: null }).eq('id', row.storage_location_id)
     await refreshStorageLocations()
   }
@@ -171,8 +185,9 @@ async function refreshAll() {
     refreshLists(),
     refreshListItems(),
     refreshStorageLocations(),
-    refreshPantryItems(),
+    refreshInventoryItems(),
     refreshAppliances(),
+    refreshFurniture(),
   ])
 }
 </script>
@@ -209,18 +224,27 @@ async function refreshAll() {
         display: (r: any) => `${r.name}${r.room ? ' (' + r.room + ')' : ''}`,
       },
       {
-        label: 'Pantry Items',
-        table: 'pantry_items',
-        rows: pantryItems,
-        error: pantryItemsError,
+        label: 'Inventory Items',
+        table: 'inventory_items',
+        rows: inventoryItems,
+        error: inventoryItemsError,
         display: (r: any) =>
-          `${r.item?.name ?? '?'}${r.storage_location ? ' (' + r.storage_location.name + ')' : ''}`,
+          `${r.item?.name ?? '?'}${r.storage_location ? ' (' + r.storage_location.name + ')' : ''}${
+            r.kind === 'household' ? ' [Household]' : ''
+          }`,
       },
       {
         label: 'Appliances',
         table: 'appliances',
         rows: appliances,
         error: appliancesError,
+        display: (r: any) => r.name,
+      },
+      {
+        label: 'Furniture',
+        table: 'furniture',
+        rows: furniture,
+        error: furnitureError,
         display: (r: any) => r.name,
       },
     ]" :key="section.label"

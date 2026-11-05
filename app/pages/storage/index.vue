@@ -38,13 +38,13 @@ async function addLocation() {
 }
 
 async function deleteLocation(id: string) {
-  // soft delete only: keeps pantry_items links intact so restoring from Trash
-  // brings them back. Also cascade-soft-deletes its (then-live) pantry items,
-  // mirroring deleteList()'s cascade to list_items.
+  // soft delete only: keeps inventory_items links intact so restoring from
+  // Trash brings them back. Also cascade-soft-deletes its (then-live)
+  // inventory items, mirroring deleteList()'s cascade to list_items.
   const deletedAt = new Date().toISOString()
   await supabase.from('storage_locations').update({ deleted_at: deletedAt }).eq('id', id)
   await supabase
-    .from('pantry_items')
+    .from('inventory_items')
     .update({ deleted_at: deletedAt })
     .eq('storage_location_id', id)
     .is('deleted_at', null)

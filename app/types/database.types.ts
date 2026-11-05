@@ -136,6 +136,133 @@ export type Database = {
           },
         ]
       }
+      furniture: {
+        Row: {
+          brand: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          needs_maintenance: boolean
+          needs_replacement: boolean
+          notes: string | null
+          quantity: number
+          room: string | null
+          space_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          needs_maintenance?: boolean
+          needs_replacement?: boolean
+          notes?: string | null
+          quantity?: number
+          room?: string | null
+          space_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          needs_maintenance?: boolean
+          needs_replacement?: boolean
+          notes?: string | null
+          quantity?: number
+          room?: string | null
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "furniture_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          item_id: string
+          kind: string
+          notes: string | null
+          quantity: number | null
+          space_id: string
+          stock_status: string | null
+          storage_location_id: string | null
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          item_id: string
+          kind?: string
+          notes?: string | null
+          quantity?: number | null
+          space_id: string
+          stock_status?: string | null
+          storage_location_id?: string | null
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          item_id?: string
+          kind?: string
+          notes?: string | null
+          quantity?: number | null
+          space_id?: string
+          stock_status?: string | null
+          storage_location_id?: string | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       item_categories: {
         Row: {
           category_id: string
@@ -447,67 +574,6 @@ export type Database = {
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pantry_items: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          id: string
-          item_id: string
-          notes: string | null
-          quantity: number | null
-          stock_status: string | null
-          storage_location_id: string
-          unit_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          id?: string
-          item_id: string
-          notes?: string | null
-          quantity?: number | null
-          stock_status?: string | null
-          storage_location_id: string
-          unit_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          id?: string
-          item_id?: string
-          notes?: string | null
-          quantity?: number | null
-          stock_status?: string | null
-          storage_location_id?: string
-          unit_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pantry_items_item_id_fkey"
-            columns: ["item_id"]
-            isOneToOne: false
-            referencedRelation: "items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_storage_location_id_fkey"
-            columns: ["storage_location_id"]
-            isOneToOne: false
-            referencedRelation: "storage_locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
