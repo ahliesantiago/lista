@@ -1,9 +1,12 @@
 <script setup lang="ts">
 const props = defineProps<{ kind: 'pantry' | 'household' }>()
 
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; plural_name?: string | null }
 type UnitOption = { id: string; name_singular: string; name_plural: string }
 const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural']
+const ITEM_FILTER_FIELDS = ['name', 'plural_name']
+const MAX_LOCATIONS = 2
+const MAX_ROOMS = 2
 
 const STOCK_STATUS_LABELS = ['No status', 'In stock', 'Low', 'Out'] as const
 type StockStatusLabel = (typeof STOCK_STATUS_LABELS)[number]
@@ -36,7 +39,8 @@ const { data: inventoryItems, refresh } = await useAsyncData(`inventory-items-${
     .from('inventory_items')
     .select(`
       id, stock_status, quantity, notes,
-      storage_location:storage_locations(id, name, room:rooms(id, name)),
+      inventory_item_locations(storage_location:storage_locations(id, name, room:rooms(id, name))),
+      inventory_item_rooms(room:rooms(id, name)),
       item:items(id, name, item_categories(categories(id, name, parent_id))),
       unit:units(id, name_singular, name_plural)
     `)
@@ -63,9 +67,19 @@ const locationOptionsForPicker = computed(() =>
   })),
 )
 
+const { data: roomOptions } = await useAsyncData('room-options', async () => {
+  const { data, error } = await supabase.from('rooms').select('id, name').is('deleted_at', null).order('name')
+  if (error) throw error
+  return data as Option[]
+})
+
 const itemOptions = ref<Option[]>([])
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
-  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, plural_name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -99,11 +113,20 @@ function unitLabel(unit: { name_singular: string; name_plural: string } | null, 
   return amount != null && amount !== 1 ? unit.name_plural : unit.name_singular
 }
 
+// an entry can now link up to 2 locations and up to 2 rooms independently;
+// grouping still needs one "home" per row, so it uses the first linked
+// location (falling back to the first linked room, then unassigned) while
+// every linked location/room is still shown as a badge on the row itself
+function primaryLocation(p: InventoryItem) {
+  return p.inventory_item_locations[0]?.storage_location ?? null
+}
+
 const groupedItems = computed(() => {
   const roomMap = new Map<string, Map<string, InventoryItem[]>>()
   for (const p of inventoryItems.value ?? []) {
-    const roomLabel = p.storage_location ? p.storage_location.room?.name || 'Other' : 'Unassigned'
-    const locName = p.storage_location ? p.storage_location.name : 'No location set'
+    const loc = primaryLocation(p)
+    const roomLabel = loc ? loc.room?.name || 'Other' : p.inventory_item_rooms[0]?.room?.name ?? 'Unassigned'
+    const locName = loc ? loc.name : 'No location set'
     if (!roomMap.has(roomLabel)) roomMap.set(roomLabel, new Map())
     const locMap = roomMap.get(roomLabel)!
     if (!locMap.has(locName)) locMap.set(locName, [])
@@ -147,7 +170,8 @@ async function deleteInventoryItem(id: string) {
 
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
-const selectedLocationId = ref<string | null>(null)
+const selectedLocations = ref<Option[]>([])
+const selectedRooms = ref<Option[]>([])
 const selectedItem = ref<Option | null>(null)
 const stockStatusLabel = ref<StockStatusLabel>('No status')
 const quantity = ref<number | null>(null)
@@ -155,6 +179,13 @@ const unitId = ref<string | null>(null)
 const notes = ref('')
 const error = ref('')
 const saving = ref(false)
+
+watch(selectedLocations, (val) => {
+  if (val.length > MAX_LOCATIONS) selectedLocations.value = val.slice(0, MAX_LOCATIONS)
+})
+watch(selectedRooms, (val) => {
+  if (val.length > MAX_ROOMS) selectedRooms.value = val.slice(0, MAX_ROOMS)
+})
 
 // a unit an entry stays linked to can be trashed (soft delete never touches
 // the link); the picker options are live-only, so without this it can't
@@ -168,7 +199,8 @@ const unitOptionsForForm = computed(() => {
 
 function resetForm() {
   editingId.value = null
-  selectedLocationId.value = null
+  selectedLocations.value = []
+  selectedRooms.value = []
   selectedItem.value = null
   stockStatusLabel.value = 'No status'
   quantity.value = null
@@ -185,7 +217,19 @@ function openCreate() {
 
 function openEdit(p: InventoryItem) {
   editingId.value = p.id
-  selectedLocationId.value = p.storage_location?.id ?? null
+  // match the shape/identity of locationOptionsForPicker's entries (which
+  // carry a computed `label`) rather than the raw embed, so the multi-select
+  // recognizes these as already-selected
+  selectedLocations.value = p.inventory_item_locations.map((l) => {
+    const loc = l.storage_location!
+    return (
+      locationOptionsForPicker.value.find((o) => o.id === loc.id) ?? {
+        ...loc,
+        label: loc.room ? `${loc.name} (${loc.room.name})` : loc.name,
+      }
+    )
+  })
+  selectedRooms.value = p.inventory_item_rooms.map((r) => r.room!)
   selectedItem.value = p.item ? { id: p.item.id, name: p.item.name } : null
   stockStatusLabel.value = p.stock_status ? DB_TO_STOCK_STATUS[p.stock_status] : 'No status'
   quantity.value = p.quantity
@@ -200,7 +244,7 @@ async function onCreateItemOption(searchTerm: string) {
   if (!space.value) return
   const { data, error: insertError } = await supabase
     .from('items')
-    .insert({ space_id: space.value.id, name: searchTerm })
+    .insert({ space_id: space.value.id, name: capitalizeFirst(searchTerm) })
     .select('id, name')
     .single()
   if (insertError || !data) return
@@ -215,7 +259,6 @@ async function save() {
 
   const payload = {
     space_id: space.value.id,
-    storage_location_id: selectedLocationId.value,
     item_id: selectedItem.value.id,
     kind: props.kind,
     stock_status: STOCK_STATUS_TO_DB[stockStatusLabel.value],
@@ -224,16 +267,42 @@ async function save() {
     notes: notes.value.trim() || null,
   }
 
-  const { error: saveError } = editingId.value
-    ? await supabase.from('inventory_items').update(payload).eq('id', editingId.value)
-    : await supabase.from('inventory_items').insert(payload)
-
-  saving.value = false
-  if (saveError) {
-    error.value = saveError.message
-    return
+  let id = editingId.value
+  if (id) {
+    const { error: updateError } = await supabase.from('inventory_items').update(payload).eq('id', id)
+    if (updateError) {
+      saving.value = false
+      error.value = updateError.message
+      return
+    }
+    await supabase.from('inventory_item_locations').delete().eq('inventory_item_id', id)
+    await supabase.from('inventory_item_rooms').delete().eq('inventory_item_id', id)
+  } else {
+    const { data, error: insertError } = await supabase
+      .from('inventory_items')
+      .insert(payload)
+      .select('id')
+      .single()
+    if (insertError || !data) {
+      saving.value = false
+      error.value = insertError?.message ?? 'Failed to save'
+      return
+    }
+    id = data.id
   }
 
+  if (selectedLocations.value.length > 0) {
+    await supabase.from('inventory_item_locations').insert(
+      selectedLocations.value.map((l) => ({ inventory_item_id: id, storage_location_id: l.id })),
+    )
+  }
+  if (selectedRooms.value.length > 0) {
+    await supabase.from('inventory_item_rooms').insert(
+      selectedRooms.value.map((r) => ({ inventory_item_id: id, room_id: r.id })),
+    )
+  }
+
+  saving.value = false
   slideoverOpen.value = false
   await refresh()
 }
@@ -281,6 +350,24 @@ async function save() {
               <span v-if="p.quantity != null" class="text-muted ml-2 text-sm">
                 {{ p.quantity }}<span v-if="p.unit">{{ ' ' + unitLabel(p.unit, p.quantity) }}</span>
               </span>
+              <UBadge
+                v-for="il in p.inventory_item_locations"
+                :key="il.storage_location!.id"
+                size="sm"
+                variant="outline"
+                class="ml-2"
+              >
+                {{ il.storage_location!.name }}
+              </UBadge>
+              <UBadge
+                v-for="ir in p.inventory_item_rooms"
+                :key="ir.room!.id"
+                size="sm"
+                variant="outline"
+                class="ml-2"
+              >
+                {{ ir.room!.name }}
+              </UBadge>
               <p v-if="p.notes" class="text-muted text-xs">{{ p.notes }}</p>
             </div>
             <div class="flex items-center gap-1" @click.stop>
@@ -320,20 +407,32 @@ async function save() {
               :items="itemOptions"
               create-item
               label-key="name"
+              :filter-fields="ITEM_FILTER_FIELDS"
               class="w-full"
               @create="onCreateItemOption"
             />
           </UFormField>
 
-          <UFormField label="Location" hint="Optional">
-            <UInputMenu
-              v-model="selectedLocationId"
-              :items="locationOptionsForPicker"
-              value-key="id"
-              label-key="label"
-              class="w-full"
-            />
-          </UFormField>
+          <div class="flex flex-col gap-2">
+            <UFormField label="Locations" hint="Up to 2 (optional)">
+              <UInputMenu
+                v-model="selectedLocations"
+                :items="locationOptionsForPicker"
+                multiple
+                label-key="label"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="Rooms" hint="Up to 2 (optional)">
+              <UInputMenu
+                v-model="selectedRooms"
+                :items="roomOptions ?? []"
+                multiple
+                label-key="name"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
 
           <UFormField label="Stock status" hint="Optional">
             <USelect v-model="stockStatusLabel" :items="STOCK_STATUS_LABELS" class="w-full" />

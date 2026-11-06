@@ -113,7 +113,7 @@ const {
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id, deleted_at, kind, storage_location_id, item:items(name), storage_location:storage_locations(id, name, deleted_at)',
+      'id, deleted_at, kind, item:items(name), inventory_item_locations(storage_location:storage_locations(id, name, deleted_at))',
     )
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false })
@@ -177,6 +177,46 @@ const {
   return data
 })
 
+const {
+  data: recipeCategories,
+  error: recipeCategoriesError,
+  refresh: refreshRecipeCategories,
+} = await useAsyncData('trash-recipe-categories', async () => {
+  const { data, error } = await supabase
+    .from('recipe_categories')
+    .select('id, name, deleted_at, parent_id')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
+// same client-side id->name lookup used for the item-side categories -
+// avoids a self-join embed on a self-referencing FK, which PostgREST's
+// schema cache doesn't reliably pick up
+const { data: allRecipeCategoryNames } = await useAsyncData('trash-all-recipe-category-names', async () => {
+  const { data, error } = await supabase.from('recipe_categories').select('id, name')
+  if (error) throw error
+  return data
+})
+const recipeCategoryNameById = computed(
+  () => new Map((allRecipeCategoryNames.value ?? []).map((c) => [c.id, c.name])),
+)
+
+const {
+  data: recipeTags,
+  error: recipeTagsError,
+  refresh: refreshRecipeTags,
+} = await useAsyncData('trash-recipe-tags', async () => {
+  const { data, error } = await supabase
+    .from('recipe_tags')
+    .select('id, name, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
 async function restore(table: string, row: Record<string, any>) {
   await supabase.from(table).update({ deleted_at: null }).eq('id', row.id)
   if (table === 'lists') {
@@ -195,16 +235,27 @@ async function restore(table: string, row: Record<string, any>) {
     await supabase.from('lists').update({ deleted_at: null }).eq('id', row.list_id)
     await refreshLists()
   } else if (table === 'storage_locations') {
-    // mirrors the lists -> list_items cascade above
-    await supabase
-      .from('inventory_items')
-      .update({ deleted_at: null })
+    // mirrors the lists -> list_items cascade above - goes through the
+    // join table since a location is no longer a direct column
+    const { data: linked } = await supabase
+      .from('inventory_item_locations')
+      .select('inventory_item_id')
       .eq('storage_location_id', row.id)
-      .not('deleted_at', 'is', null)
+    const linkedIds = (linked ?? []).map((l) => l.inventory_item_id)
+    if (linkedIds.length > 0) {
+      await supabase
+        .from('inventory_items')
+        .update({ deleted_at: null })
+        .in('id', linkedIds)
+        .not('deleted_at', 'is', null)
+    }
     await refreshInventoryItems()
-  } else if (table === 'inventory_items' && row.storage_location?.deleted_at) {
-    await supabase.from('storage_locations').update({ deleted_at: null }).eq('id', row.storage_location_id)
-    await refreshStorageLocations()
+  } else if (table === 'inventory_items') {
+    const loc = row.inventory_item_locations?.[0]?.storage_location
+    if (loc?.deleted_at) {
+      await supabase.from('storage_locations').update({ deleted_at: null }).eq('id', loc.id)
+      await refreshStorageLocations()
+    }
   }
   await refreshAll()
 }
@@ -229,6 +280,8 @@ async function refreshAll() {
     refreshFurniture(),
     refreshRecipes(),
     refreshEquipment(),
+    refreshRecipeCategories(),
+    refreshRecipeTags(),
   ])
 }
 </script>
@@ -270,10 +323,12 @@ async function refreshAll() {
         table: 'inventory_items',
         rows: inventoryItems,
         error: inventoryItemsError,
-        display: (r: any) =>
-          `${r.item?.name ?? '?'}${r.storage_location ? ' (' + r.storage_location.name + ')' : ''}${
+        display: (r: any) => {
+          const loc = r.inventory_item_locations?.[0]?.storage_location
+          return `${r.item?.name ?? '?'}${loc ? ' (' + loc.name + ')' : ''}${
             r.kind === 'household' ? ' [Household]' : ''
-          }`,
+          }`
+        },
       },
       {
         label: 'Appliances',
@@ -301,6 +356,21 @@ async function refreshAll() {
         table: 'equipment',
         rows: equipmentRows,
         error: equipmentError,
+        display: (r: any) => r.name,
+      },
+      {
+        label: 'Recipe Categories',
+        table: 'recipe_categories',
+        rows: recipeCategories,
+        error: recipeCategoriesError,
+        display: (r: any) =>
+          `${r.name}${r.parent_id ? ' (sub of ' + (recipeCategoryNameById.get(r.parent_id) ?? '?') + ')' : ''}`,
+      },
+      {
+        label: 'Recipe Tags',
+        table: 'recipe_tags',
+        rows: recipeTags,
+        error: recipeTagsError,
         display: (r: any) => r.name,
       },
     ]" :key="section.label"

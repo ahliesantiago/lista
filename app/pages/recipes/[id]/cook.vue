@@ -27,7 +27,9 @@ const { data: steps } = await useAsyncData(`cook-steps-${recipeId}`, async () =>
 const { data: ingredients } = await useAsyncData(`cook-ingredients-${recipeId}`, async () => {
   const { data, error } = await supabase
     .from('recipe_ingredients')
-    .select('id, name, quantity, note, unit:units(id, name_singular, name_plural)')
+    .select(
+      'id, name, quantity, note, item:items!recipe_ingredients_item_id_fkey(name), unit:units(id, name_singular, name_plural)',
+    )
     .eq('recipe_id', recipeId)
     .order('sort_order')
   if (error) throw error
@@ -59,7 +61,7 @@ const currentStepId = computed(() => steps.value?.find((s) => !checked.value[s.i
           <span v-if="ing.quantity != null">
             {{ ing.quantity }}<span v-if="ing.unit">{{ ' ' + unitLabel(ing.unit, ing.quantity) }}</span>
           </span>
-          {{ ing.name }}
+          {{ ing.item?.name ?? ing.name }}
           <span v-if="ing.note" class="text-muted">, {{ ing.note }}</span>
         </li>
       </ul>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; plural_name?: string | null }
 type UnitOption = {
   id: string
   name_singular: string
@@ -8,6 +8,7 @@ type UnitOption = {
   abbrev_plural: string | null
 }
 const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
+const ITEM_FILTER_FIELDS = ['name', 'plural_name']
 
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
@@ -18,8 +19,8 @@ const { data: recipes, refresh } = await useAsyncData('recipes', async () => {
     .from('recipes')
     .select(`
       id, name, prep_time_minutes, cook_time_minutes, is_favorite, is_interested,
-      recipe_categories(categories(id, name, parent_id)),
-      recipe_tags(tags(id, name))
+      recipe_category_links(recipe_categories(id, name, parent_id)),
+      recipe_tag_links(recipe_tags(id, name))
     `)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -29,7 +30,11 @@ const { data: recipes, refresh } = await useAsyncData('recipes', async () => {
 
 const itemOptions = ref<Option[]>([])
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
-  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, plural_name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -168,8 +173,9 @@ async function importFromUrl() {
 
     const draftIngredients: DraftIngredient[] = result.ingredientLines.map((line) => {
       const parsed = parseIngredientLine(line, unitOptions.value ?? [])
+      const target = parsed.itemName.toLowerCase()
       const existing = itemOptions.value.find(
-        (it) => it.name.toLowerCase() === parsed.itemName.toLowerCase(),
+        (it) => it.name.toLowerCase() === target || it.plural_name?.toLowerCase() === target,
       )
       return {
         key: crypto.randomUUID(),
@@ -292,7 +298,7 @@ async function saveImportDraft() {
   <div class="mx-auto max-w-2xl">
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold">Recipes</h1>
-      <UButton to="/equipment" variant="outline" size="sm">Manage equipment</UButton>
+      <UButton to="/recipe-categories" variant="outline" size="sm">Manage recipe categories</UButton>
     </div>
 
     <template v-if="!importDraft">
@@ -337,16 +343,16 @@ async function saveImportDraft() {
             <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="ml-2 text-red-500" />
             <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="ml-1 text-amber-500" />
             <UBadge
-              v-for="rc in recipe.recipe_categories"
-              :key="rc.categories!.id"
+              v-for="rc in recipe.recipe_category_links"
+              :key="rc.recipe_categories!.id"
               size="sm"
-              :variant="rc.categories!.parent_id ? 'subtle' : 'solid'"
+              :variant="rc.recipe_categories!.parent_id ? 'subtle' : 'solid'"
               class="ml-2"
             >
-              {{ rc.categories!.name }}
+              {{ rc.recipe_categories!.name }}
             </UBadge>
-            <UBadge v-for="t in recipe.recipe_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
-              {{ t.tags!.name }}
+            <UBadge v-for="t in recipe.recipe_tag_links" :key="t.recipe_tags!.id" size="sm" variant="outline" class="ml-2">
+              {{ t.recipe_tags!.name }}
             </UBadge>
             <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted ml-2 text-sm">
               <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>

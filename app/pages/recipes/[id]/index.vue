@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; plural_name?: string | null }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
@@ -9,6 +9,7 @@ type UnitOption = {
   abbrev_plural: string | null
 }
 const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
+const ITEM_FILTER_FIELDS = ['name', 'plural_name']
 const MAX_CATEGORIES = 2
 const MAX_SUBCATEGORIES = 2
 
@@ -25,8 +26,8 @@ const { data: recipe } = await useAsyncData(`recipe-${recipeId}`, async () => {
       id, name, description, image_url, source_url, servings,
       prep_time_minutes, cook_time_minutes, total_time_minutes,
       is_favorite, is_interested,
-      recipe_categories(categories(id, name, parent_id)),
-      recipe_tags(tags(id, name)),
+      recipe_category_links(recipe_categories(id, name, parent_id)),
+      recipe_tag_links(recipe_tags(id, name)),
       recipe_equipment(equipment(id, name))
     `)
     .eq('id', recipeId)
@@ -64,9 +65,13 @@ const { data: ingredients, refresh: refreshIngredients } = await useAsyncData(
   },
 )
 
-const { data: categoryOptions } = await useAsyncData('category-options', async () => {
+function ingredientDisplayName(ing: { name: string; item: { name: string } | null }) {
+  return ing.item?.name ?? ing.name
+}
+
+const { data: categoryOptions } = await useAsyncData('recipe-category-options', async () => {
   const { data, error } = await supabase
-    .from('categories')
+    .from('recipe_categories')
     .select('id, name, parent_id')
     .is('deleted_at', null)
     .order('name')
@@ -76,8 +81,8 @@ const { data: categoryOptions } = await useAsyncData('category-options', async (
 const topLevelCategoryOptions = computed(() => categoryOptions.value?.filter((c) => !c.parent_id) ?? [])
 
 const tagOptions = ref<Option[]>([])
-const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () => {
-  const { data, error } = await supabase.from('tags').select('id, name').is('deleted_at', null).order('name')
+const { data: tagOptionsInitial } = await useAsyncData('recipe-tag-options', async () => {
+  const { data, error } = await supabase.from('recipe_tags').select('id, name').is('deleted_at', null).order('name')
   if (error) throw error
   return data
 })
@@ -93,7 +98,11 @@ equipmentOptions.value = equipmentOptionsInitial.value ?? []
 
 const itemOptions = ref<Option[]>([])
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
-  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, plural_name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -123,11 +132,15 @@ const servings = ref(recipe.value?.servings ?? '')
 const prepTime = ref<number | null>(recipe.value?.prep_time_minutes ?? null)
 const cookTime = ref<number | null>(recipe.value?.cook_time_minutes ?? null)
 const totalTime = ref<number | null>(recipe.value?.total_time_minutes ?? null)
+// dedicated refs (not read/written on `recipe.value` directly) so toggling
+// is always instantly reactive, same as every other editable field here
+const isFavorite = ref(recipe.value?.is_favorite ?? false)
+const isInterested = ref(recipe.value?.is_interested ?? false)
 
-const linkedCategories = recipe.value?.recipe_categories.map((rc) => rc.categories!) ?? []
+const linkedCategories = recipe.value?.recipe_category_links.map((rc) => rc.recipe_categories!) ?? []
 const selectedCategories = ref<CategoryOption[]>(linkedCategories.filter((c) => !c.parent_id))
 const selectedSubcategories = ref<CategoryOption[]>(linkedCategories.filter((c) => c.parent_id))
-const recipeTags = ref<Option[]>(recipe.value?.recipe_tags.map((rt) => rt.tags!) ?? [])
+const recipeTags = ref<Option[]>(recipe.value?.recipe_tag_links.map((rt) => rt.recipe_tags!) ?? [])
 const recipeEquipment = ref<Option[]>(recipe.value?.recipe_equipment.map((re) => re.equipment!) ?? [])
 
 const subcategoryOptions = computed(() => {
@@ -140,15 +153,13 @@ async function saveRecipeField(patch: Record<string, unknown>) {
 }
 
 async function toggleFavorite() {
-  if (!recipe.value) return
-  recipe.value.is_favorite = !recipe.value.is_favorite
-  await saveRecipeField({ is_favorite: recipe.value.is_favorite })
+  isFavorite.value = !isFavorite.value
+  await saveRecipeField({ is_favorite: isFavorite.value })
 }
 
 async function toggleInterested() {
-  if (!recipe.value) return
-  recipe.value.is_interested = !recipe.value.is_interested
-  await saveRecipeField({ is_interested: recipe.value.is_interested })
+  isInterested.value = !isInterested.value
+  await saveRecipeField({ is_interested: isInterested.value })
 }
 
 watch(selectedCategories, async (newVal, oldVal) => {
@@ -163,10 +174,12 @@ watch(selectedCategories, async (newVal, oldVal) => {
   const added = newVal.filter((c) => !oldVal.some((o) => o.id === c.id))
   const removed = oldVal.filter((o) => !newVal.some((c) => c.id === o.id))
   if (added.length > 0) {
-    await supabase.from('recipe_categories').insert(added.map((c) => ({ recipe_id: recipeId, category_id: c.id })))
+    await supabase
+      .from('recipe_category_links')
+      .insert(added.map((c) => ({ recipe_id: recipeId, category_id: c.id })))
   }
   for (const r of removed) {
-    await supabase.from('recipe_categories').delete().eq('recipe_id', recipeId).eq('category_id', r.id)
+    await supabase.from('recipe_category_links').delete().eq('recipe_id', recipeId).eq('category_id', r.id)
   }
 })
 
@@ -178,10 +191,12 @@ watch(selectedSubcategories, async (newVal, oldVal) => {
   const added = newVal.filter((c) => !oldVal.some((o) => o.id === c.id))
   const removed = oldVal.filter((o) => !newVal.some((c) => c.id === o.id))
   if (added.length > 0) {
-    await supabase.from('recipe_categories').insert(added.map((c) => ({ recipe_id: recipeId, category_id: c.id })))
+    await supabase
+      .from('recipe_category_links')
+      .insert(added.map((c) => ({ recipe_id: recipeId, category_id: c.id })))
   }
   for (const r of removed) {
-    await supabase.from('recipe_categories').delete().eq('recipe_id', recipeId).eq('category_id', r.id)
+    await supabase.from('recipe_category_links').delete().eq('recipe_id', recipeId).eq('category_id', r.id)
   }
 })
 
@@ -189,10 +204,10 @@ watch(recipeTags, async (newVal, oldVal) => {
   const added = newVal.filter((t) => !oldVal.some((o) => o.id === t.id))
   const removed = oldVal.filter((o) => !newVal.some((t) => t.id === o.id))
   if (added.length > 0) {
-    await supabase.from('recipe_tags').insert(added.map((t) => ({ recipe_id: recipeId, tag_id: t.id })))
+    await supabase.from('recipe_tag_links').insert(added.map((t) => ({ recipe_id: recipeId, tag_id: t.id })))
   }
   for (const r of removed) {
-    await supabase.from('recipe_tags').delete().eq('recipe_id', recipeId).eq('tag_id', r.id)
+    await supabase.from('recipe_tag_links').delete().eq('recipe_id', recipeId).eq('tag_id', r.id)
   }
 })
 
@@ -212,7 +227,7 @@ watch(recipeEquipment, async (newVal, oldVal) => {
 async function onCreateTagOption(searchTerm: string) {
   if (!space.value) return
   const { data, error: insertError } = await supabase
-    .from('tags')
+    .from('recipe_tags')
     .insert({ space_id: space.value.id, name: searchTerm })
     .select('id, name')
     .single()
@@ -265,7 +280,7 @@ function resetIngredientForm() {
 async function addIngredient() {
   if (!ingredientItem.value || !ingredientItem.value.name.trim()) return
   ingredientError.value = ''
-  const { itemId, name } = await resolveItem(
+  const { itemId, name: resolvedName } = await resolveItem(
     space.value!.id,
     ingredientItem.value,
     ingredientAddToMasterList.value,
@@ -276,7 +291,7 @@ async function addIngredient() {
     .insert({
       recipe_id: recipeId,
       item_id: itemId,
-      name,
+      name: resolvedName,
       quantity: ingredientQuantity.value,
       unit_id: ingredientUnitId.value,
       note: ingredientNote.value.trim() || null,
@@ -302,17 +317,30 @@ async function deleteIngredient(id: string) {
   await refreshIngredients()
 }
 
+// --- edit ingredient: name is always a plain editable field (no combobox),
+// re-linking to a different item is a separate always-empty picker, and
+// "Update saved item" decides whether an edited name cascades to the
+// shared item or just detaches this ingredient to its own one-off name
+
 const editingIngredientId = ref<string | null>(null)
-const editIngredientItem = ref<Option | null>(null)
+const editOriginalItemId = ref<string | null>(null)
+const editIngredientName = ref('')
+const editIngredientRelink = ref<Option | null>(null)
+const editUpdateSavedItem = ref(false)
 const editIngredientAddToMasterList = ref(true)
 const editIngredientQuantity = ref<number | null>(null)
 const editIngredientUnitId = ref<string | null>(null)
 const editIngredientNote = ref('')
 const editIngredientAlternatives = ref<Option[]>([])
 
+const editHasLink = computed(() => !!(editIngredientRelink.value || editOriginalItemId.value))
+
 function startEditIngredient(ing: Ingredient) {
   editingIngredientId.value = ing.id
-  editIngredientItem.value = ing.item ? { id: ing.item.id, name: ing.item.name } : { id: '', name: ing.name }
+  editOriginalItemId.value = ing.item?.id ?? null
+  editIngredientName.value = ingredientDisplayName(ing)
+  editIngredientRelink.value = null
+  editUpdateSavedItem.value = false
   editIngredientAddToMasterList.value = true
   editIngredientQuantity.value = ing.quantity
   editIngredientUnitId.value = ing.unit?.id ?? null
@@ -325,18 +353,40 @@ function cancelEditIngredient() {
 }
 
 async function saveEditIngredient(id: string) {
-  if (!editIngredientItem.value || !editIngredientItem.value.name.trim()) return
-  const { itemId, name } = await resolveItem(
-    space.value!.id,
-    editIngredientItem.value,
-    editIngredientAddToMasterList.value,
-    itemOptions,
-  )
+  const name = editIngredientName.value.trim()
+  if (!name) return
+
+  let itemId: string | null = editIngredientRelink.value ? editIngredientRelink.value.id : editOriginalItemId.value
+
+  if (itemId) {
+    if (editUpdateSavedItem.value) {
+      await supabase.from('items').update({ name }).eq('id', itemId)
+      const cached = itemOptions.value.find((o) => o.id === itemId)
+      if (cached) cached.name = name
+    } else if (!editIngredientRelink.value) {
+      // no relink happened; if the typed name no longer matches the linked
+      // item's stored name, detach rather than silently show a mismatch
+      const linked = itemOptions.value.find((o) => o.id === itemId)
+      if (linked && linked.name.trim().toLowerCase() !== name.toLowerCase()) {
+        itemId = null
+      }
+    }
+  } else if (editIngredientAddToMasterList.value) {
+    const { itemId: newId, name: resolvedName } = await resolveItem(
+      space.value!.id,
+      { id: '', name },
+      true,
+      itemOptions,
+    )
+    itemId = newId
+    if (resolvedName !== name) editIngredientName.value = resolvedName
+  }
+
   await supabase
     .from('recipe_ingredients')
     .update({
       item_id: itemId,
-      name,
+      name: editIngredientName.value.trim(),
       quantity: editIngredientQuantity.value,
       unit_id: editIngredientUnitId.value,
       note: editIngredientNote.value.trim() || null,
@@ -370,15 +420,32 @@ async function deleteStep(id: string) {
   await refreshSteps()
 }
 
-async function moveStep(index: number, direction: -1 | 1) {
+// reorder is local-first (instant, synchronous) with persistence queued in
+// the background through a promise chain - each queued write recomputes
+// numbers from whatever the array looks like when it actually runs, and
+// writes execute strictly in order, so rapid clicking can never land
+// out of order or feel laggy
+let stepPersistQueue: Promise<unknown> = Promise.resolve()
+
+function persistStepOrder() {
+  stepPersistQueue = stepPersistQueue.then(async () => {
+    if (!steps.value) return
+    await Promise.all(
+      steps.value.map((s) => supabase.from('recipe_steps').update({ step_number: s.step_number }).eq('id', s.id)),
+    )
+  })
+}
+
+function moveStep(index: number, direction: -1 | 1) {
   if (!steps.value) return
   const targetIndex = index + direction
   if (targetIndex < 0 || targetIndex >= steps.value.length) return
-  const a = steps.value[index]
-  const b = steps.value[targetIndex]
-  await supabase.from('recipe_steps').update({ step_number: b.step_number }).eq('id', a.id)
-  await supabase.from('recipe_steps').update({ step_number: a.step_number }).eq('id', b.id)
-  await refreshSteps()
+  const [moved] = steps.value.splice(index, 1)
+  steps.value.splice(targetIndex, 0, moved!)
+  steps.value.forEach((s, i) => {
+    s.step_number = i + 1
+  })
+  persistStepOrder()
 }
 
 const editingStepId = ref<string | null>(null)
@@ -509,14 +576,14 @@ async function saveEditStep(id: string) {
             size="sm"
             variant="ghost"
             icon="i-lucide-heart"
-            :color="recipe.is_favorite ? 'error' : 'neutral'"
+            :color="isFavorite ? 'error' : 'neutral'"
             @click="toggleFavorite"
           />
           <UButton
             size="sm"
             variant="ghost"
             icon="i-lucide-bookmark"
-            :color="recipe.is_interested ? 'warning' : 'neutral'"
+            :color="isInterested ? 'warning' : 'neutral'"
             @click="toggleInterested"
           />
         </div>
@@ -533,7 +600,7 @@ async function saveEditStep(id: string) {
             <span v-if="ing.quantity != null" class="text-muted text-sm">
               {{ ing.quantity }}<span v-if="ing.unit">{{ ' ' + unitLabel(ing.unit, ing.quantity) }}</span>
             </span>
-            <span class="ml-1 font-medium">{{ ing.name }}</span>
+            <span class="ml-1 font-medium">{{ ingredientDisplayName(ing) }}</span>
             <span v-if="ing.note" class="text-muted text-sm">, {{ ing.note }}</span>
             <span v-if="ing.recipe_ingredient_alternatives.length > 0" class="text-muted block text-xs">
               or: {{ ing.recipe_ingredient_alternatives.map((a) => a.item!.name).join(', ') }}
@@ -551,10 +618,23 @@ async function saveEditStep(id: string) {
           </div>
         </div>
         <div v-else class="flex flex-col gap-2">
-          <ItemMasterListField
-            v-model:item="editIngredientItem"
-            v-model:add-to-master-list="editIngredientAddToMasterList"
-            :item-options="itemOptions"
+          <UInput v-model="editIngredientName" placeholder="Item name" />
+          <UInputMenu
+            v-model="editIngredientRelink"
+            :items="itemOptions"
+            label-key="name"
+            :filter-fields="ITEM_FILTER_FIELDS"
+            placeholder="Re-link to a different item (optional)"
+          />
+          <UCheckbox
+            v-if="editHasLink"
+            v-model="editUpdateSavedItem"
+            label="Update saved item"
+          />
+          <UCheckbox
+            v-else
+            v-model="editIngredientAddToMasterList"
+            label="Add to master list"
           />
           <div class="grid grid-cols-2 gap-2">
             <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
@@ -573,6 +653,7 @@ async function saveEditStep(id: string) {
             :items="itemOptions"
             multiple
             label-key="name"
+            :filter-fields="ITEM_FILTER_FIELDS"
             placeholder="Alternatives (optional)"
           />
           <div class="flex gap-2">
@@ -607,6 +688,7 @@ async function saveEditStep(id: string) {
         :items="itemOptions"
         multiple
         label-key="name"
+        :filter-fields="ITEM_FILTER_FIELDS"
         placeholder="Alternatives (optional)"
       />
       <p v-if="ingredientError" class="text-sm text-red-500">{{ ingredientError }}</p>

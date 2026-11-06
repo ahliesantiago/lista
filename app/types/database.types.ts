@@ -174,6 +174,66 @@ export type Database = {
           },
         ]
       }
+      equipment_locations: {
+        Row: {
+          equipment_id: string
+          storage_location_id: string
+        }
+        Insert: {
+          equipment_id: string
+          storage_location_id: string
+        }
+        Update: {
+          equipment_id?: string
+          storage_location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_locations_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_locations_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipment_rooms: {
+        Row: {
+          equipment_id: string
+          room_id: string
+        }
+        Insert: {
+          equipment_id: string
+          room_id: string
+        }
+        Update: {
+          equipment_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_rooms_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_rooms_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       furniture: {
         Row: {
           brand: string | null
@@ -227,6 +287,66 @@ export type Database = {
           },
         ]
       }
+      inventory_item_locations: {
+        Row: {
+          inventory_item_id: string
+          storage_location_id: string
+        }
+        Insert: {
+          inventory_item_id: string
+          storage_location_id: string
+        }
+        Update: {
+          inventory_item_id?: string
+          storage_location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_locations_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_locations_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_item_rooms: {
+        Row: {
+          inventory_item_id: string
+          room_id: string
+        }
+        Insert: {
+          inventory_item_id: string
+          room_id: string
+        }
+        Update: {
+          inventory_item_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_rooms_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_rooms_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           created_at: string
@@ -239,7 +359,6 @@ export type Database = {
           quantity: number | null
           space_id: string
           stock_status: string | null
-          storage_location_id: string | null
           unit_id: string | null
         }
         Insert: {
@@ -253,7 +372,6 @@ export type Database = {
           quantity?: number | null
           space_id: string
           stock_status?: string | null
-          storage_location_id?: string | null
           unit_id?: string | null
         }
         Update: {
@@ -267,7 +385,6 @@ export type Database = {
           quantity?: number | null
           space_id?: string
           stock_status?: string | null
-          storage_location_id?: string | null
           unit_id?: string | null
         }
         Relationships: [
@@ -283,13 +400,6 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_storage_location_id_fkey"
-            columns: ["storage_location_id"]
-            isOneToOne: false
-            referencedRelation: "storage_locations"
             referencedColumns: ["id"]
           },
           {
@@ -618,6 +728,51 @@ export type Database = {
       }
       recipe_categories: {
         Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_categories_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_category_links: {
+        Row: {
           category_id: string
           recipe_id: string
         }
@@ -631,14 +786,14 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "recipe_categories_category_id_fkey"
+            foreignKeyName: "recipe_category_links_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
-            referencedRelation: "categories"
+            referencedRelation: "recipe_categories"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "recipe_categories_recipe_id_fkey"
+            foreignKeyName: "recipe_category_links_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
             referencedRelation: "recipes"
@@ -796,7 +951,7 @@ export type Database = {
           },
         ]
       }
-      recipe_tags: {
+      recipe_tag_links: {
         Row: {
           recipe_id: string
           tag_id: string
@@ -811,17 +966,52 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "recipe_tags_recipe_id_fkey"
+            foreignKeyName: "recipe_tag_links_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "recipe_tags_tag_id_fkey"
+            foreignKeyName: "recipe_tag_links_tag_id_fkey"
             columns: ["tag_id"]
             isOneToOne: false
-            referencedRelation: "tags"
+            referencedRelation: "recipe_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_tags: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_tags_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
             referencedColumns: ["id"]
           },
         ]

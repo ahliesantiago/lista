@@ -1,5 +1,6 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; plural_name?: string | null }
+const ITEM_FILTER_FIELDS = ['name', 'plural_name']
 
 defineProps<{ itemOptions: Option[] }>()
 
@@ -23,6 +24,7 @@ function onCreate(searchTerm: string) {
       :items="itemOptions"
       create-item
       label-key="name"
+      :filter-fields="ITEM_FILTER_FIELDS"
       placeholder="Item name"
       class="flex-1"
       @create="onCreate"

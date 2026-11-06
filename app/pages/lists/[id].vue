@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; plural_name?: string | null }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
@@ -46,7 +46,11 @@ const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, 
 })
 
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
-  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, plural_name')
+    .is('deleted_at', null)
+    .order('name')
   if (error) throw error
   return data
 })
@@ -198,29 +202,20 @@ const editUnitOptionsForAmount = computed(() => {
   return base
 })
 
+const { resolveItem } = useResolveMasterItem()
+
 async function addItem() {
-  if (!space.value || !selectedItem.value) return
-  const itemName = selectedItem.value.name.trim()
-  if (!itemName) return
+  if (!space.value || !selectedItem.value || !selectedItem.value.name.trim()) return
 
   error.value = ''
   adding.value = true
 
-  let itemId: string | null = selectedItem.value.id || null
-  if (!itemId && addToMasterList.value) {
-    const { data, error: itemError } = await supabase
-      .from('items')
-      .insert({ space_id: space.value.id, name: itemName })
-      .select('id, name')
-      .single()
-    if (itemError) {
-      adding.value = false
-      error.value = itemError.message
-      return
-    }
-    itemId = data.id
-    itemOptions.value.push(data)
-  }
+  const { itemId, name: resolvedName } = await resolveItem(
+    space.value.id,
+    selectedItem.value,
+    addToMasterList.value,
+    itemOptions,
+  )
 
   if (itemId && unitId.value) {
     await supabase
@@ -231,7 +226,7 @@ async function addItem() {
   const { error: insertError } = await supabase.from('list_items').insert({
     list_id: listId,
     item_id: itemId,
-    name: itemName,
+    name: resolvedName,
     amount: amount.value,
     unit_id: unitId.value,
     size: size.value.trim() || null,

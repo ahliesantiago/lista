@@ -164,9 +164,10 @@ async function save() {
   error.value = ''
   saving.value = true
 
+  const isNew = !editingId.value
   const payload = {
     space_id: space.value.id,
-    name: name.value.trim(),
+    name: isNew ? capitalizeFirst(name.value.trim()) : name.value.trim(),
     plural_name: pluralName.value.trim() || null,
     default_unit_id: defaultUnitId.value,
     price: price.value,
