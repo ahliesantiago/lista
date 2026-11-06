@@ -136,6 +136,44 @@ export type Database = {
           },
         ]
       }
+      equipment: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          notes: string | null
+          space_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          space_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          space_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       furniture: {
         Row: {
           brand: string | null
@@ -571,6 +609,278 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "lists_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_categories: {
+        Row: {
+          category_id: string
+          recipe_id: string
+        }
+        Insert: {
+          category_id: string
+          recipe_id: string
+        }
+        Update: {
+          category_id?: string
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_categories_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_equipment: {
+        Row: {
+          equipment_id: string
+          recipe_id: string
+        }
+        Insert: {
+          equipment_id: string
+          recipe_id: string
+        }
+        Update: {
+          equipment_id?: string
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_equipment_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_equipment_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_ingredient_alternatives: {
+        Row: {
+          item_id: string
+          recipe_ingredient_id: string
+        }
+        Insert: {
+          item_id: string
+          recipe_ingredient_id: string
+        }
+        Update: {
+          item_id?: string
+          recipe_ingredient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredient_alternatives_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredient_alternatives_recipe_ingredient_id_fkey"
+            columns: ["recipe_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          note: string | null
+          quantity: number | null
+          recipe_id: string
+          sort_order: number
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          note?: string | null
+          quantity?: number | null
+          recipe_id: string
+          sort_order?: number
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          note?: string | null
+          quantity?: number | null
+          recipe_id?: string
+          sort_order?: number
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_steps: {
+        Row: {
+          created_at: string
+          id: string
+          instruction: string
+          recipe_id: string
+          step_number: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instruction: string
+          recipe_id: string
+          step_number: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instruction?: string
+          recipe_id?: string
+          step_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_steps_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_tags: {
+        Row: {
+          recipe_id: string
+          tag_id: string
+        }
+        Insert: {
+          recipe_id: string
+          tag_id: string
+        }
+        Update: {
+          recipe_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_tags_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          cook_time_minutes: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_favorite: boolean
+          is_interested: boolean
+          name: string
+          prep_time_minutes: number | null
+          servings: string | null
+          source_url: string | null
+          space_id: string
+          total_time_minutes: number | null
+          updated_at: string
+        }
+        Insert: {
+          cook_time_minutes?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_favorite?: boolean
+          is_interested?: boolean
+          name: string
+          prep_time_minutes?: number | null
+          servings?: string | null
+          source_url?: string | null
+          space_id: string
+          total_time_minutes?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cook_time_minutes?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_favorite?: boolean
+          is_interested?: boolean
+          name?: string
+          prep_time_minutes?: number | null
+          servings?: string | null
+          source_url?: string | null
+          space_id?: string
+          total_time_minutes?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipes_space_id_fkey"
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"

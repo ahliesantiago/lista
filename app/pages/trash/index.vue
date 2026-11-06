@@ -149,6 +149,34 @@ const {
   return data
 })
 
+const {
+  data: recipes,
+  error: recipesError,
+  refresh: refreshRecipes,
+} = await useAsyncData('trash-recipes', async () => {
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id, name, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
+const {
+  data: equipmentRows,
+  error: equipmentError,
+  refresh: refreshEquipment,
+} = await useAsyncData('trash-equipment', async () => {
+  const { data, error } = await supabase
+    .from('equipment')
+    .select('id, name, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
 async function restore(table: string, row: Record<string, any>) {
   await supabase.from(table).update({ deleted_at: null }).eq('id', row.id)
   if (table === 'lists') {
@@ -199,6 +227,8 @@ async function refreshAll() {
     refreshInventoryItems(),
     refreshAppliances(),
     refreshFurniture(),
+    refreshRecipes(),
+    refreshEquipment(),
   ])
 }
 </script>
@@ -257,6 +287,20 @@ async function refreshAll() {
         table: 'furniture',
         rows: furniture,
         error: furnitureError,
+        display: (r: any) => r.name,
+      },
+      {
+        label: 'Recipes',
+        table: 'recipes',
+        rows: recipes,
+        error: recipesError,
+        display: (r: any) => r.name,
+      },
+      {
+        label: 'Equipment',
+        table: 'equipment',
+        rows: equipmentRows,
+        error: equipmentError,
         display: (r: any) => r.name,
       },
     ]" :key="section.label"
