@@ -167,7 +167,6 @@ async function onCreateListTag(searchTerm: string) {
 // --- add item ---
 
 const selectedItem = ref<Option | null>(null)
-const itemPickerOpen = ref(false)
 const itemPickerKey = ref(0)
 const addToMasterList = ref(true)
 const amount = ref<number | null>(null)
@@ -198,11 +197,6 @@ const editUnitOptionsForAmount = computed(() => {
   }
   return base
 })
-
-function onCreateItemOption(searchTerm: string) {
-  selectedItem.value = { id: '', name: searchTerm }
-  itemPickerOpen.value = false
-}
 
 async function addItem() {
   if (!space.value || !selectedItem.value) return
@@ -396,21 +390,11 @@ async function deleteList() {
     </div>
 
     <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addItem">
-      <UInputMenu
+      <ItemMasterListField
         :key="itemPickerKey"
-        v-model="selectedItem"
-        v-model:open="itemPickerOpen"
-        :items="itemOptions"
-        create-item
-        label-key="name"
-        placeholder="Item name"
-        class="w-full"
-        @create="onCreateItemOption"
-      />
-      <UCheckbox
-        v-if="!selectedItem || !selectedItem.id"
-        v-model="addToMasterList"
-        label="Add to master list"
+        v-model:item="selectedItem"
+        v-model:add-to-master-list="addToMasterList"
+        :item-options="itemOptions"
       />
       <div class="grid grid-cols-3 gap-2">
         <UInputNumber v-model="amount" placeholder="Qty" :min="0" />

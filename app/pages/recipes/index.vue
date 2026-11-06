@@ -7,9 +7,11 @@ type UnitOption = {
   abbrev_singular: string | null
   abbrev_plural: string | null
 }
+const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', 'abbrev_plural']
 
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
+const { resolveItem } = useResolveMasterItem()
 
 const { data: recipes, refresh } = await useAsyncData('recipes', async () => {
   const { data, error } = await supabase
@@ -23,6 +25,24 @@ const { data: recipes, refresh } = await useAsyncData('recipes', async () => {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
+})
+
+const itemOptions = ref<Option[]>([])
+const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
+  const { data, error } = await supabase.from('items').select('id, name').is('deleted_at', null).order('name')
+  if (error) throw error
+  return data
+})
+itemOptions.value = itemOptionsInitial.value ?? []
+
+const { data: unitOptions } = await useAsyncData('unit-options', async () => {
+  const { data, error } = await supabase
+    .from('units')
+    .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
+    .is('deleted_at', null)
+    .order('name_singular')
+  if (error) throw error
+  return data as UnitOption[]
 })
 
 const filter = ref<'all' | 'favorites' | 'interested'>('all')
@@ -59,11 +79,34 @@ async function deleteRecipe(id: string) {
   await refresh()
 }
 
-// --- import from URL ---
+// --- import from URL: fetch + parse into a draft, write nothing until Save ---
+
+type DraftIngredient = {
+  key: string
+  item: Option
+  addToMasterList: boolean
+  quantity: number | null
+  unitId: string | null
+  note: string
+}
+
+type ImportDraft = {
+  name: string
+  description: string
+  imageUrl: string
+  sourceUrl: string
+  servings: string
+  prepTimeMinutes: number | null
+  cookTimeMinutes: number | null
+  totalTimeMinutes: number | null
+  steps: string[]
+  ingredients: DraftIngredient[]
+}
 
 const importUrl = ref('')
 const importing = ref(false)
 const importError = ref('')
+const importDraft = ref<ImportDraft | null>(null)
 
 function parseQuantity(text: string): { value: number | null; rest: string } {
   const fractionMatch = text.match(/^(\d+)\s*\/\s*(\d+)\s*/)
@@ -77,7 +120,7 @@ function parseQuantity(text: string): { value: number | null; rest: string } {
   return { value: null, rest: text }
 }
 
-function parseIngredientLine(line: string, unitOptions: UnitOption[]) {
+function parseIngredientLine(line: string, units: UnitOption[]) {
   const { value: quantity, rest } = parseQuantity(line.trim())
   let remaining = rest.trim()
   let unitId: string | null = null
@@ -85,7 +128,7 @@ function parseIngredientLine(line: string, unitOptions: UnitOption[]) {
   for (const wordCount of [2, 1]) {
     if (words.length < wordCount) continue
     const candidate = words.slice(0, wordCount).join(' ').toLowerCase().replace(/[.,]/g, '')
-    const match = unitOptions.find((u) =>
+    const match = units.find((u) =>
       [u.name_singular, u.name_plural, u.abbrev_singular, u.abbrev_plural]
         .filter((v): v is string => !!v)
         .some((v) => v.toLowerCase() === candidate),
@@ -106,7 +149,7 @@ function parseIngredientLine(line: string, unitOptions: UnitOption[]) {
 }
 
 async function importFromUrl() {
-  if (!space.value || !importUrl.value.trim()) return
+  if (!importUrl.value.trim()) return
   importError.value = ''
   importing.value = true
 
@@ -123,72 +166,125 @@ async function importFromUrl() {
       steps: string[]
     }>('/api/recipes/import', { method: 'POST', body: { url: importUrl.value.trim() } })
 
-    const { data: recipeRow, error: insertError } = await supabase
-      .from('recipes')
-      .insert({
-        space_id: space.value.id,
-        name: result.name || 'Imported recipe',
-        description: result.description,
-        image_url: result.imageUrl,
-        source_url: importUrl.value.trim(),
-        servings: result.servings,
-        prep_time_minutes: result.prepTimeMinutes,
-        cook_time_minutes: result.cookTimeMinutes,
-        total_time_minutes: result.totalTimeMinutes,
-      })
-      .select('id')
-      .single()
-    if (insertError || !recipeRow) throw new Error(insertError?.message ?? 'Failed to create recipe')
-
-    if (result.steps.length > 0) {
-      await supabase.from('recipe_steps').insert(
-        result.steps.map((instruction, i) => ({ recipe_id: recipeRow.id, step_number: i + 1, instruction })),
+    const draftIngredients: DraftIngredient[] = result.ingredientLines.map((line) => {
+      const parsed = parseIngredientLine(line, unitOptions.value ?? [])
+      const existing = itemOptions.value.find(
+        (it) => it.name.toLowerCase() === parsed.itemName.toLowerCase(),
       )
-    }
-
-    if (result.ingredientLines.length > 0) {
-      const { data: itemOptions } = await supabase.from('items').select('id, name').is('deleted_at', null)
-      const { data: unitOptions } = await supabase
-        .from('units')
-        .select('id, name_singular, name_plural, abbrev_singular, abbrev_plural')
-        .is('deleted_at', null)
-
-      const items = itemOptions ?? []
-      for (let i = 0; i < result.ingredientLines.length; i++) {
-        const parsed = parseIngredientLine(result.ingredientLines[i], unitOptions ?? [])
-        if (!parsed.itemName) continue
-
-        let item = items.find((it) => it.name.toLowerCase() === parsed.itemName.toLowerCase())
-        if (!item) {
-          const { data: newItem } = await supabase
-            .from('items')
-            .insert({ space_id: space.value.id, name: parsed.itemName })
-            .select('id, name')
-            .single()
-          if (newItem) {
-            items.push(newItem)
-            item = newItem
-          }
-        }
-        if (!item) continue
-
-        await supabase.from('recipe_ingredients').insert({
-          recipe_id: recipeRow.id,
-          item_id: item.id,
-          quantity: parsed.quantity,
-          unit_id: parsed.unitId,
-          note: parsed.note,
-          sort_order: i,
-        })
+      return {
+        key: crypto.randomUUID(),
+        item: existing ? { id: existing.id, name: existing.name } : { id: '', name: parsed.itemName },
+        addToMasterList: true,
+        quantity: parsed.quantity,
+        unitId: parsed.unitId,
+        note: parsed.note ?? '',
       }
-    }
+    })
 
-    await navigateTo(`/recipes/${recipeRow.id}`)
+    importDraft.value = {
+      name: result.name || 'Imported recipe',
+      description: result.description ?? '',
+      imageUrl: result.imageUrl ?? '',
+      sourceUrl: importUrl.value.trim(),
+      servings: result.servings ?? '',
+      prepTimeMinutes: result.prepTimeMinutes,
+      cookTimeMinutes: result.cookTimeMinutes,
+      totalTimeMinutes: result.totalTimeMinutes,
+      steps: [...result.steps],
+      ingredients: draftIngredients,
+    }
   } catch (err: any) {
     importError.value = err?.data?.statusMessage ?? err?.message ?? 'Import failed'
   } finally {
     importing.value = false
   }
+}
+
+function cancelImportDraft() {
+  importDraft.value = null
+  importUrl.value = ''
+  importError.value = ''
+}
+
+function addDraftIngredient() {
+  importDraft.value?.ingredients.push({
+    key: crypto.randomUUID(),
+    item: { id: '', name: '' },
+    addToMasterList: true,
+    quantity: null,
+    unitId: null,
+    note: '',
+  })
+}
+
+function removeDraftIngredient(key: string) {
+  if (!importDraft.value) return
+  importDraft.value.ingredients = importDraft.value.ingredients.filter((i) => i.key !== key)
+}
+
+function addDraftStep() {
+  importDraft.value?.steps.push('')
+}
+
+function removeDraftStep(index: number) {
+  importDraft.value?.steps.splice(index, 1)
+}
+
+const savingImport = ref(false)
+const saveImportError = ref('')
+
+async function saveImportDraft() {
+  if (!importDraft.value || !space.value) return
+  saveImportError.value = ''
+  savingImport.value = true
+  const draft = importDraft.value
+
+  const { data: recipeRow, error: insertError } = await supabase
+    .from('recipes')
+    .insert({
+      space_id: space.value.id,
+      name: draft.name.trim() || 'Imported recipe',
+      description: draft.description.trim() || null,
+      image_url: draft.imageUrl.trim() || null,
+      source_url: draft.sourceUrl || null,
+      servings: draft.servings.trim() || null,
+      prep_time_minutes: draft.prepTimeMinutes,
+      cook_time_minutes: draft.cookTimeMinutes,
+      total_time_minutes: draft.totalTimeMinutes,
+    })
+    .select('id')
+    .single()
+  if (insertError || !recipeRow) {
+    savingImport.value = false
+    saveImportError.value = insertError?.message ?? 'Failed to save recipe'
+    return
+  }
+
+  const steps = draft.steps.map((s) => s.trim()).filter(Boolean)
+  if (steps.length > 0) {
+    await supabase.from('recipe_steps').insert(
+      steps.map((instruction, i) => ({ recipe_id: recipeRow.id, step_number: i + 1, instruction })),
+    )
+  }
+
+  for (let i = 0; i < draft.ingredients.length; i++) {
+    const row = draft.ingredients[i]!
+    if (!row.item.name.trim()) continue
+    const { itemId, name } = await resolveItem(space.value.id, row.item, row.addToMasterList, itemOptions)
+    await supabase.from('recipe_ingredients').insert({
+      recipe_id: recipeRow.id,
+      item_id: itemId,
+      name,
+      quantity: row.quantity,
+      unit_id: row.unitId,
+      note: row.note.trim() || null,
+      sort_order: i,
+    })
+  }
+
+  savingImport.value = false
+  importDraft.value = null
+  await navigateTo(`/recipes/${recipeRow.id}`)
 }
 </script>
 
@@ -199,72 +295,160 @@ async function importFromUrl() {
       <UButton to="/equipment" variant="outline" size="sm">Manage equipment</UButton>
     </div>
 
-    <form class="mb-4 flex gap-2" @submit.prevent="createRecipe">
-      <UInput v-model="newName" placeholder="New recipe name" required class="flex-1" />
-      <UButton type="submit" :loading="creating">Add</UButton>
-    </form>
-    <p v-if="createError" class="mb-4 text-sm text-red-500">{{ createError }}</p>
+    <template v-if="!importDraft">
+      <form class="mb-4 flex gap-2" @submit.prevent="createRecipe">
+        <UInput v-model="newName" placeholder="New recipe name" required class="flex-1" />
+        <UButton type="submit" :loading="creating">Add</UButton>
+      </form>
+      <p v-if="createError" class="mb-4 text-sm text-red-500">{{ createError }}</p>
 
-    <form class="mb-6 flex gap-2 rounded border border-default p-3" @submit.prevent="importFromUrl">
-      <UInput v-model="importUrl" placeholder="Import from URL..." class="flex-1" />
-      <UButton type="submit" :loading="importing" variant="outline">Import</UButton>
-    </form>
-    <p v-if="importError" class="mb-4 text-sm text-red-500">{{ importError }}</p>
+      <form class="mb-6 flex gap-2 rounded border border-default p-3" @submit.prevent="importFromUrl">
+        <UInput v-model="importUrl" placeholder="Import from URL..." class="flex-1" />
+        <UButton type="submit" :loading="importing" variant="outline">Import</UButton>
+      </form>
+      <p v-if="importError" class="mb-4 text-sm text-red-500">{{ importError }}</p>
 
-    <div class="mb-4 flex gap-2">
-      <UButton size="sm" :variant="filter === 'all' ? 'solid' : 'ghost'" @click="filter = 'all'">All</UButton>
-      <UButton
-        size="sm"
-        :variant="filter === 'favorites' ? 'solid' : 'ghost'"
-        @click="filter = 'favorites'"
-      >
-        Favorites
-      </UButton>
-      <UButton
-        size="sm"
-        :variant="filter === 'interested' ? 'solid' : 'ghost'"
-        @click="filter = 'interested'"
-      >
-        Interested
-      </UButton>
-    </div>
-
-    <ul class="flex flex-col gap-2">
-      <li
-        v-for="recipe in visibleRecipes"
-        :key="recipe.id"
-        class="flex items-center justify-between rounded border border-default px-3 py-2"
-      >
-        <NuxtLink :to="`/recipes/${recipe.id}`" class="flex-1">
-          <span class="font-medium">{{ recipe.name }}</span>
-          <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="ml-2 text-red-500" />
-          <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="ml-1 text-amber-500" />
-          <UBadge
-            v-for="rc in recipe.recipe_categories"
-            :key="rc.categories!.id"
-            size="sm"
-            :variant="rc.categories!.parent_id ? 'subtle' : 'solid'"
-            class="ml-2"
-          >
-            {{ rc.categories!.name }}
-          </UBadge>
-          <UBadge v-for="t in recipe.recipe_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
-            {{ t.tags!.name }}
-          </UBadge>
-          <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted ml-2 text-sm">
-            <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>
-            <span v-if="recipe.cook_time_minutes"> Cook {{ recipe.cook_time_minutes }}m</span>
-          </span>
-        </NuxtLink>
+      <div class="mb-4 flex gap-2">
+        <UButton size="sm" :variant="filter === 'all' ? 'solid' : 'ghost'" @click="filter = 'all'">All</UButton>
         <UButton
           size="sm"
-          variant="ghost"
-          color="error"
-          icon="i-lucide-trash-2"
-          @click="deleteRecipe(recipe.id)"
-        />
-      </li>
-      <li v-if="visibleRecipes.length === 0" class="text-muted text-sm">No recipes yet.</li>
-    </ul>
+          :variant="filter === 'favorites' ? 'solid' : 'ghost'"
+          @click="filter = 'favorites'"
+        >
+          Favorites
+        </UButton>
+        <UButton
+          size="sm"
+          :variant="filter === 'interested' ? 'solid' : 'ghost'"
+          @click="filter = 'interested'"
+        >
+          Interested
+        </UButton>
+      </div>
+
+      <ul class="flex flex-col gap-2">
+        <li
+          v-for="recipe in visibleRecipes"
+          :key="recipe.id"
+          class="flex items-center justify-between rounded border border-default px-3 py-2"
+        >
+          <NuxtLink :to="`/recipes/${recipe.id}`" class="flex-1">
+            <span class="font-medium">{{ recipe.name }}</span>
+            <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="ml-2 text-red-500" />
+            <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="ml-1 text-amber-500" />
+            <UBadge
+              v-for="rc in recipe.recipe_categories"
+              :key="rc.categories!.id"
+              size="sm"
+              :variant="rc.categories!.parent_id ? 'subtle' : 'solid'"
+              class="ml-2"
+            >
+              {{ rc.categories!.name }}
+            </UBadge>
+            <UBadge v-for="t in recipe.recipe_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
+              {{ t.tags!.name }}
+            </UBadge>
+            <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted ml-2 text-sm">
+              <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>
+              <span v-if="recipe.cook_time_minutes"> Cook {{ recipe.cook_time_minutes }}m</span>
+            </span>
+          </NuxtLink>
+          <UButton
+            size="sm"
+            variant="ghost"
+            color="error"
+            icon="i-lucide-trash-2"
+            @click="deleteRecipe(recipe.id)"
+          />
+        </li>
+        <li v-if="visibleRecipes.length === 0" class="text-muted text-sm">No recipes yet.</li>
+      </ul>
+    </template>
+
+    <template v-else>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Review import</h2>
+        <UButton variant="ghost" @click="cancelImportDraft">Cancel</UButton>
+      </div>
+
+      <div class="mb-4 flex flex-col gap-2 rounded border border-default p-3">
+        <UFormField label="Name">
+          <UInput v-model="importDraft.name" class="w-full" />
+        </UFormField>
+        <UFormField label="Description" hint="Optional">
+          <UTextarea v-model="importDraft.description" class="w-full" />
+        </UFormField>
+        <UFormField label="Image URL" hint="Optional">
+          <UInput v-model="importDraft.imageUrl" class="w-full" />
+        </UFormField>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <UFormField label="Prep time" hint="Minutes">
+            <UInputNumber v-model="importDraft.prepTimeMinutes" :min="0" class="w-full" />
+          </UFormField>
+          <UFormField label="Cook time" hint="Minutes">
+            <UInputNumber v-model="importDraft.cookTimeMinutes" :min="0" class="w-full" />
+          </UFormField>
+          <UFormField label="Total time" hint="Minutes">
+            <UInputNumber v-model="importDraft.totalTimeMinutes" :min="0" class="w-full" />
+          </UFormField>
+          <UFormField label="Servings">
+            <UInput v-model="importDraft.servings" class="w-full" />
+          </UFormField>
+        </div>
+      </div>
+
+      <h3 class="mb-2 font-semibold">Ingredients</h3>
+      <ul class="mb-2 flex flex-col gap-2">
+        <li
+          v-for="row in importDraft.ingredients"
+          :key="row.key"
+          class="rounded border border-default px-3 py-2"
+        >
+          <div class="flex flex-col gap-2">
+            <ItemMasterListField
+              v-model:item="row.item"
+              v-model:add-to-master-list="row.addToMasterList"
+              :item-options="itemOptions"
+            />
+            <div class="grid grid-cols-2 gap-2">
+              <UInputNumber v-model="row.quantity" placeholder="Qty" :min="0" />
+              <UInputMenu
+                v-model="row.unitId"
+                :items="unitOptions ?? []"
+                value-key="id"
+                label-key="name_singular"
+                :filter-fields="UNIT_FILTER_FIELDS"
+                placeholder="Unit"
+              />
+            </div>
+            <div class="flex gap-2">
+              <UInput v-model="row.note" placeholder="Note (optional)" class="flex-1" />
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="error"
+                icon="i-lucide-trash-2"
+                @click="removeDraftIngredient(row.key)"
+              />
+            </div>
+          </div>
+        </li>
+        <li v-if="importDraft.ingredients.length === 0" class="text-muted text-sm">No ingredients parsed.</li>
+      </ul>
+      <UButton size="sm" variant="outline" class="mb-6" @click="addDraftIngredient">Add ingredient row</UButton>
+
+      <h3 class="mb-2 font-semibold">Steps</h3>
+      <ul class="mb-2 flex flex-col gap-2">
+        <li v-for="(_, index) in importDraft.steps" :key="index" class="flex gap-2">
+          <UTextarea v-model="importDraft.steps[index]" class="flex-1" />
+          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeDraftStep(index)" />
+        </li>
+        <li v-if="importDraft.steps.length === 0" class="text-muted text-sm">No steps parsed.</li>
+      </ul>
+      <UButton size="sm" variant="outline" class="mb-6" @click="addDraftStep">Add step</UButton>
+
+      <p v-if="saveImportError" class="mb-4 text-sm text-red-500">{{ saveImportError }}</p>
+      <UButton block :loading="savingImport" @click="saveImportDraft">Save recipe</UButton>
+    </template>
   </div>
 </template>

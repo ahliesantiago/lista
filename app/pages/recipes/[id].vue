@@ -52,7 +52,7 @@ const { data: ingredients, refresh: refreshIngredients } = await useAsyncData(
     const { data, error } = await supabase
       .from('recipe_ingredients')
       .select(`
-        id, quantity, note, sort_order,
+        id, name, quantity, note, sort_order,
         item:items!recipe_ingredients_item_id_fkey(id, name),
         unit:units(id, name_singular, name_plural),
         recipe_ingredient_alternatives(item:items(id, name))
@@ -243,26 +243,18 @@ async function deleteRecipe() {
 type Ingredient = NonNullable<typeof ingredients.value>[number]
 
 const ingredientItem = ref<Option | null>(null)
+const ingredientAddToMasterList = ref(true)
 const ingredientQuantity = ref<number | null>(null)
 const ingredientUnitId = ref<string | null>(null)
 const ingredientNote = ref('')
 const ingredientAlternatives = ref<Option[]>([])
 const ingredientError = ref('')
 
-async function onCreateIngredientItem(searchTerm: string) {
-  if (!space.value) return
-  const { data, error: insertError } = await supabase
-    .from('items')
-    .insert({ space_id: space.value.id, name: searchTerm })
-    .select('id, name')
-    .single()
-  if (insertError || !data) return
-  itemOptions.value.push(data)
-  ingredientItem.value = data
-}
+const { resolveItem } = useResolveMasterItem()
 
 function resetIngredientForm() {
   ingredientItem.value = null
+  ingredientAddToMasterList.value = true
   ingredientQuantity.value = null
   ingredientUnitId.value = null
   ingredientNote.value = ''
@@ -271,13 +263,20 @@ function resetIngredientForm() {
 }
 
 async function addIngredient() {
-  if (!ingredientItem.value) return
+  if (!ingredientItem.value || !ingredientItem.value.name.trim()) return
   ingredientError.value = ''
+  const { itemId, name } = await resolveItem(
+    space.value!.id,
+    ingredientItem.value,
+    ingredientAddToMasterList.value,
+    itemOptions,
+  )
   const { data, error: insertError } = await supabase
     .from('recipe_ingredients')
     .insert({
       recipe_id: recipeId,
-      item_id: ingredientItem.value.id,
+      item_id: itemId,
+      name,
       quantity: ingredientQuantity.value,
       unit_id: ingredientUnitId.value,
       note: ingredientNote.value.trim() || null,
@@ -304,6 +303,8 @@ async function deleteIngredient(id: string) {
 }
 
 const editingIngredientId = ref<string | null>(null)
+const editIngredientItem = ref<Option | null>(null)
+const editIngredientAddToMasterList = ref(true)
 const editIngredientQuantity = ref<number | null>(null)
 const editIngredientUnitId = ref<string | null>(null)
 const editIngredientNote = ref('')
@@ -311,6 +312,8 @@ const editIngredientAlternatives = ref<Option[]>([])
 
 function startEditIngredient(ing: Ingredient) {
   editingIngredientId.value = ing.id
+  editIngredientItem.value = ing.item ? { id: ing.item.id, name: ing.item.name } : { id: '', name: ing.name }
+  editIngredientAddToMasterList.value = true
   editIngredientQuantity.value = ing.quantity
   editIngredientUnitId.value = ing.unit?.id ?? null
   editIngredientNote.value = ing.note ?? ''
@@ -322,9 +325,18 @@ function cancelEditIngredient() {
 }
 
 async function saveEditIngredient(id: string) {
+  if (!editIngredientItem.value || !editIngredientItem.value.name.trim()) return
+  const { itemId, name } = await resolveItem(
+    space.value!.id,
+    editIngredientItem.value,
+    editIngredientAddToMasterList.value,
+    itemOptions,
+  )
   await supabase
     .from('recipe_ingredients')
     .update({
+      item_id: itemId,
+      name,
       quantity: editIngredientQuantity.value,
       unit_id: editIngredientUnitId.value,
       note: editIngredientNote.value.trim() || null,
@@ -521,7 +533,7 @@ async function saveEditStep(id: string) {
             <span v-if="ing.quantity != null" class="text-muted text-sm">
               {{ ing.quantity }}<span v-if="ing.unit">{{ ' ' + unitLabel(ing.unit, ing.quantity) }}</span>
             </span>
-            <span class="ml-1 font-medium">{{ ing.item!.name }}</span>
+            <span class="ml-1 font-medium">{{ ing.name }}</span>
             <span v-if="ing.note" class="text-muted text-sm">, {{ ing.note }}</span>
             <span v-if="ing.recipe_ingredient_alternatives.length > 0" class="text-muted block text-xs">
               or: {{ ing.recipe_ingredient_alternatives.map((a) => a.item!.name).join(', ') }}
@@ -539,7 +551,11 @@ async function saveEditStep(id: string) {
           </div>
         </div>
         <div v-else class="flex flex-col gap-2">
-          <span class="font-medium">{{ ing.item!.name }}</span>
+          <ItemMasterListField
+            v-model:item="editIngredientItem"
+            v-model:add-to-master-list="editIngredientAddToMasterList"
+            :item-options="itemOptions"
+          />
           <div class="grid grid-cols-2 gap-2">
             <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
             <UInputMenu
@@ -569,14 +585,10 @@ async function saveEditStep(id: string) {
     </ul>
 
     <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addIngredient">
-      <UInputMenu
-        v-model="ingredientItem"
-        :items="itemOptions"
-        create-item
-        label-key="name"
-        placeholder="Item name"
-        class="w-full"
-        @create="onCreateIngredientItem"
+      <ItemMasterListField
+        v-model:item="ingredientItem"
+        v-model:add-to-master-list="ingredientAddToMasterList"
+        :item-options="itemOptions"
       />
       <div class="grid grid-cols-2 gap-2">
         <UInputNumber v-model="ingredientQuantity" placeholder="Qty" :min="0" />
