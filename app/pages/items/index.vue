@@ -90,6 +90,14 @@ const defaultUnitOptionsForForm = computed(() => {
   return extra && !base.some((u) => u.id === extra.id) ? [...base, extra] : base
 })
 
+// a default unit should always be one of the allowed units too, so picking
+// one adds it to Allowed Units automatically if it isn't there already
+watch(defaultUnitId, (val) => {
+  if (!val || selectedUnits.value.some((u) => u.id === val)) return
+  const unit = unitOptions.value?.find((u) => u.id === val)
+  if (unit) selectedUnits.value.push(unit)
+})
+
 const subcategoryOptions = computed(() => {
   const parentIds = new Set(selectedCategories.value.map((c) => c.id))
   return categoryOptions.value?.filter((c) => c.parent_id && parentIds.has(c.parent_id)) ?? []
@@ -111,6 +119,14 @@ watch(selectedSubcategories, (val) => {
     selectedSubcategories.value = val.slice(0, MAX_SUBCATEGORIES)
   }
 })
+
+const { onCreateCategoryOption, onCreateSubcategoryOption } = useCategoryCreation(
+  'categories',
+  space,
+  categoryOptions,
+  selectedCategories,
+  selectedSubcategories,
+)
 
 function resetForm() {
   editingId.value = null
@@ -281,8 +297,10 @@ async function deleteItem(id: string) {
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
+              create-item
               label-key="name"
               class="w-full"
+              @create="onCreateCategoryOption"
             />
           </UFormField>
 
@@ -291,9 +309,11 @@ async function deleteItem(id: string) {
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
+              create-item
               label-key="name"
               placeholder="Pick a category first"
               class="w-full"
+              @create="onCreateSubcategoryOption"
             />
           </UFormField>
 
@@ -302,14 +322,23 @@ async function deleteItem(id: string) {
           </UFormField>
 
           <UFormField label="Default Unit" hint="Optional">
-            <UInputMenu
-              v-model="defaultUnitId"
-              :items="defaultUnitOptionsForForm"
-              value-key="id"
-              label-key="name_singular"
-              :filter-fields="UNIT_FILTER_FIELDS"
-              class="w-full"
-            />
+            <div class="flex items-center gap-2">
+              <UInputMenu
+                v-model="defaultUnitId"
+                :items="defaultUnitOptionsForForm"
+                value-key="id"
+                label-key="name_singular"
+                :filter-fields="UNIT_FILTER_FIELDS"
+                class="w-full flex-1"
+              />
+              <UButton
+                v-if="defaultUnitId"
+                size="sm"
+                variant="ghost"
+                icon="i-lucide-x"
+                @click="defaultUnitId = null"
+              />
+            </div>
           </UFormField>
 
           <UFormField label="Allowed Units" hint="Optional">

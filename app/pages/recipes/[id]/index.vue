@@ -224,6 +224,14 @@ watch(recipeEquipment, async (newVal, oldVal) => {
   }
 })
 
+const { onCreateCategoryOption, onCreateSubcategoryOption } = useCategoryCreation(
+  'recipe_categories',
+  space,
+  categoryOptions,
+  selectedCategories,
+  selectedSubcategories,
+)
+
 async function onCreateTagOption(searchTerm: string) {
   if (!space.value) return
   const { data, error: insertError } = await supabase
@@ -258,7 +266,6 @@ async function deleteRecipe() {
 type Ingredient = NonNullable<typeof ingredients.value>[number]
 
 const ingredientItem = ref<Option | null>(null)
-const ingredientAddToMasterList = ref(true)
 const ingredientQuantity = ref<number | null>(null)
 const ingredientUnitId = ref<string | null>(null)
 const ingredientNote = ref('')
@@ -269,7 +276,6 @@ const { resolveItem } = useResolveMasterItem()
 
 function resetIngredientForm() {
   ingredientItem.value = null
-  ingredientAddToMasterList.value = true
   ingredientQuantity.value = null
   ingredientUnitId.value = null
   ingredientNote.value = ''
@@ -283,8 +289,8 @@ async function addIngredient() {
   const { itemId, name: resolvedName } = await resolveItem(
     space.value!.id,
     ingredientItem.value,
-    ingredientAddToMasterList.value,
-    itemOptions,
+    true,
+    itemOptions
   )
   const { data, error: insertError } = await supabase
     .from('recipe_ingredients')
@@ -317,31 +323,18 @@ async function deleteIngredient(id: string) {
   await refreshIngredients()
 }
 
-// --- edit ingredient: name is always a plain editable field (no combobox),
-// re-linking to a different item is a separate always-empty picker, and
-// "Update saved item" decides whether an edited name cascades to the
-// shared item or just detaches this ingredient to its own one-off name
-
 const editingIngredientId = ref<string | null>(null)
 const editOriginalItemId = ref<string | null>(null)
 const editIngredientName = ref('')
-const editIngredientRelink = ref<Option | null>(null)
-const editUpdateSavedItem = ref(false)
-const editIngredientAddToMasterList = ref(true)
 const editIngredientQuantity = ref<number | null>(null)
 const editIngredientUnitId = ref<string | null>(null)
 const editIngredientNote = ref('')
 const editIngredientAlternatives = ref<Option[]>([])
 
-const editHasLink = computed(() => !!(editIngredientRelink.value || editOriginalItemId.value))
-
 function startEditIngredient(ing: Ingredient) {
   editingIngredientId.value = ing.id
   editOriginalItemId.value = ing.item?.id ?? null
   editIngredientName.value = ingredientDisplayName(ing)
-  editIngredientRelink.value = null
-  editUpdateSavedItem.value = false
-  editIngredientAddToMasterList.value = true
   editIngredientQuantity.value = ing.quantity
   editIngredientUnitId.value = ing.unit?.id ?? null
   editIngredientNote.value = ing.note ?? ''
@@ -356,37 +349,21 @@ async function saveEditIngredient(id: string) {
   const name = editIngredientName.value.trim()
   if (!name) return
 
-  let itemId: string | null = editIngredientRelink.value ? editIngredientRelink.value.id : editOriginalItemId.value
-
+  let itemId = editOriginalItemId.value
   if (itemId) {
-    if (editUpdateSavedItem.value) {
-      await supabase.from('items').update({ name }).eq('id', itemId)
-      const cached = itemOptions.value.find((o) => o.id === itemId)
-      if (cached) cached.name = name
-    } else if (!editIngredientRelink.value) {
-      // no relink happened; if the typed name no longer matches the linked
-      // item's stored name, detach rather than silently show a mismatch
-      const linked = itemOptions.value.find((o) => o.id === itemId)
-      if (linked && linked.name.trim().toLowerCase() !== name.toLowerCase()) {
-        itemId = null
-      }
-    }
-  } else if (editIngredientAddToMasterList.value) {
-    const { itemId: newId, name: resolvedName } = await resolveItem(
-      space.value!.id,
-      { id: '', name },
-      true,
-      itemOptions,
-    )
-    itemId = newId
-    if (resolvedName !== name) editIngredientName.value = resolvedName
+    await supabase.from('items').update({ name }).eq('id', itemId)
+    const cached = itemOptions.value.find((o) => o.id === itemId)
+    if (cached) cached.name = name
+  } else {
+    const resolved = await resolveItem(space.value!.id, { id: '', name }, true, itemOptions)
+    itemId = resolved.itemId
   }
 
   await supabase
     .from('recipe_ingredients')
     .update({
       item_id: itemId,
-      name: editIngredientName.value.trim(),
+      name,
       quantity: editIngredientQuantity.value,
       unit_id: editIngredientUnitId.value,
       note: editIngredientNote.value.trim() || null,
@@ -420,11 +397,12 @@ async function deleteStep(id: string) {
   await refreshSteps()
 }
 
-// reorder is local-first (instant, synchronous) with persistence queued in
-// the background through a promise chain - each queued write recomputes
-// numbers from whatever the array looks like when it actually runs, and
-// writes execute strictly in order, so rapid clicking can never land
-// out of order or feel laggy
+/**
+ * Reordering through a local-first approach with a
+ * promise chain to persist the new order in the background.
+ * Each reorder operation updates the local state immediately, and then
+ * queues a persistence operation to update the database.
+ */
 let stepPersistQueue: Promise<unknown> = Promise.resolve()
 
 function persistStepOrder() {
@@ -440,11 +418,16 @@ function moveStep(index: number, direction: -1 | 1) {
   if (!steps.value) return
   const targetIndex = index + direction
   if (targetIndex < 0 || targetIndex >= steps.value.length) return
-  const [moved] = steps.value.splice(index, 1)
-  steps.value.splice(targetIndex, 0, moved!)
-  steps.value.forEach((s, i) => {
+  // build a fresh array rather than splicing in place - useAsyncData's ref
+  // isn't guaranteed to pick up in-place array mutations, only a reassigned
+  // .value, which is what was making this only show up after a refetch
+  const next = [...steps.value]
+  const [moved] = next.splice(index, 1)
+  next.splice(targetIndex, 0, moved!)
+  next.forEach((s, i) => {
     s.step_number = i + 1
   })
+  steps.value = next
   persistStepOrder()
 }
 
@@ -532,8 +515,10 @@ async function saveEditStep(id: string) {
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
+              create-item
               label-key="name"
               class="w-full"
+              @create="onCreateCategoryOption"
             />
           </UFormField>
           <UFormField label="Subcategories" hint="Up to 2 (optional)" class="flex-1">
@@ -541,9 +526,11 @@ async function saveEditStep(id: string) {
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
+              create-item
               label-key="name"
               placeholder="Pick a category first"
               class="w-full"
+              @create="onCreateSubcategoryOption"
             />
           </UFormField>
         </div>
@@ -619,23 +606,6 @@ async function saveEditStep(id: string) {
         </div>
         <div v-else class="flex flex-col gap-2">
           <UInput v-model="editIngredientName" placeholder="Item name" />
-          <UInputMenu
-            v-model="editIngredientRelink"
-            :items="itemOptions"
-            label-key="name"
-            :filter-fields="ITEM_FILTER_FIELDS"
-            placeholder="Re-link to a different item (optional)"
-          />
-          <UCheckbox
-            v-if="editHasLink"
-            v-model="editUpdateSavedItem"
-            label="Update saved item"
-          />
-          <UCheckbox
-            v-else
-            v-model="editIngredientAddToMasterList"
-            label="Add to master list"
-          />
           <div class="grid grid-cols-2 gap-2">
             <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
             <UInputMenu
@@ -666,11 +636,7 @@ async function saveEditStep(id: string) {
     </ul>
 
     <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addIngredient">
-      <ItemMasterListField
-        v-model:item="ingredientItem"
-        v-model:add-to-master-list="ingredientAddToMasterList"
-        :item-options="itemOptions"
-      />
+      <RecipeItemField v-model:item="ingredientItem" :item-options="itemOptions" />
       <div class="grid grid-cols-2 gap-2">
         <UInputNumber v-model="ingredientQuantity" placeholder="Qty" :min="0" />
         <UInputMenu

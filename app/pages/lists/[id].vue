@@ -156,6 +156,14 @@ watch(listTags, async (newVal, oldVal) => {
   }
 })
 
+const { onCreateCategoryOption, onCreateSubcategoryOption } = useCategoryCreation(
+  'categories',
+  space,
+  categoryOptions,
+  selectedCategories,
+  selectedSubcategories,
+)
+
 async function onCreateListTag(searchTerm: string) {
   if (!space.value) return
   const { data, error: insertError } = await supabase
@@ -343,8 +351,10 @@ async function deleteList() {
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
+              create-item
               label-key="name"
               class="w-full"
+              @create="onCreateCategoryOption"
             />
           </UFormField>
           <UFormField label="Subcategories" hint="Up to 2 (optional)" class="flex-1">
@@ -352,9 +362,11 @@ async function deleteList() {
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
+              create-item
               label-key="name"
               placeholder="Pick a category first"
               class="w-full"
+              @create="onCreateSubcategoryOption"
             />
           </UFormField>
         </div>

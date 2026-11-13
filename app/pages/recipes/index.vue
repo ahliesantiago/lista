@@ -89,7 +89,6 @@ async function deleteRecipe(id: string) {
 type DraftIngredient = {
   key: string
   item: Option
-  addToMasterList: boolean
   quantity: number | null
   unitId: string | null
   note: string
@@ -180,7 +179,6 @@ async function importFromUrl() {
       return {
         key: crypto.randomUUID(),
         item: existing ? { id: existing.id, name: existing.name } : { id: '', name: parsed.itemName },
-        addToMasterList: true,
         quantity: parsed.quantity,
         unitId: parsed.unitId,
         note: parsed.note ?? '',
@@ -216,7 +214,6 @@ function addDraftIngredient() {
   importDraft.value?.ingredients.push({
     key: crypto.randomUUID(),
     item: { id: '', name: '' },
-    addToMasterList: true,
     quantity: null,
     unitId: null,
     note: '',
@@ -276,7 +273,7 @@ async function saveImportDraft() {
   for (let i = 0; i < draft.ingredients.length; i++) {
     const row = draft.ingredients[i]!
     if (!row.item.name.trim()) continue
-    const { itemId, name } = await resolveItem(space.value.id, row.item, row.addToMasterList, itemOptions)
+    const { itemId, name } = await resolveItem(space.value.id, row.item, true, itemOptions)
     await supabase.from('recipe_ingredients').insert({
       recipe_id: recipeRow.id,
       item_id: itemId,
@@ -411,11 +408,7 @@ async function saveImportDraft() {
           class="rounded border border-default px-3 py-2"
         >
           <div class="flex flex-col gap-2">
-            <ItemMasterListField
-              v-model:item="row.item"
-              v-model:add-to-master-list="row.addToMasterList"
-              :item-options="itemOptions"
-            />
+            <RecipeItemField v-model:item="row.item" :item-options="itemOptions" />
             <div class="grid grid-cols-2 gap-2">
               <UInputNumber v-model="row.quantity" placeholder="Qty" :min="0" />
               <UInputMenu
