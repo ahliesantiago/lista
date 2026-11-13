@@ -585,6 +585,55 @@ export type Database = {
           },
         ]
       }
+      list_item_sources: {
+        Row: {
+          created_at: string
+          id: string
+          list_item_id: string
+          quantity: number | null
+          recipe_id: string | null
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          list_item_id: string
+          quantity?: number | null
+          recipe_id?: string | null
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          list_item_id?: string
+          quantity?: number | null
+          recipe_id?: string | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_item_sources_list_item_id_fkey"
+            columns: ["list_item_id"]
+            isOneToOne: false
+            referencedRelation: "list_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_item_sources_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_item_sources_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       list_items: {
         Row: {
           amount: number | null
@@ -1514,5 +1563,5 @@ export const Constants = {
     Enums: {},
   },
 } as const
-A new version of Supabase CLI is available: v3.0.0 (currently installed v2.22.6)
+A new version of Supabase CLI is available: v3.1.0 (currently installed v2.22.6)
 We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

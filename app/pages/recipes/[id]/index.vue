@@ -261,6 +261,142 @@ async function deleteRecipe() {
   await navigateTo('/recipes')
 }
 
+// --- add to list (merges into an existing line when the item+unit already
+// matches on that list, otherwise adds a new line; always records a
+// list_item_sources row so the provenance breakdown stays honest even when
+// units didn't match and nothing could be summed) ---
+
+const { data: activeLists } = await useAsyncData('pantry-active-lists', async () => {
+  const { data, error } = await supabase
+    .from('lists')
+    .select('id, name')
+    .eq('status', 'active')
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+  return data
+})
+
+const listPicker = ref<Option | null>(null)
+const addingToList = ref(false)
+const addToListError = ref('')
+const addToListResult = ref('')
+
+function onCreateListOption(searchTerm: string) {
+  listPicker.value = { id: '', name: searchTerm }
+}
+
+async function addRecipeToList() {
+  if (!space.value || !listPicker.value || !listPicker.value.name.trim() || !ingredients.value) return
+  addToListError.value = ''
+  addToListResult.value = ''
+  addingToList.value = true
+
+  let listId = listPicker.value.id
+  const listName = listPicker.value.name.trim()
+  if (!listId) {
+    const { data, error: insertError } = await supabase
+      .from('lists')
+      .insert({ space_id: space.value.id, name: listName })
+      .select('id, name')
+      .single()
+    if (insertError || !data) {
+      addingToList.value = false
+      addToListError.value = insertError?.message ?? 'Failed to create list'
+      return
+    }
+    listId = data.id
+    activeLists.value = [...(activeLists.value ?? []), data]
+  }
+
+  let addedCount = 0
+  let mergedCount = 0
+
+  for (const ing of ingredients.value) {
+    if (!ing.item) continue
+    const { data: existingRows } = await supabase
+      .from('list_items')
+      .select('id, amount, unit_id')
+      .eq('list_id', listId)
+      .eq('item_id', ing.item.id)
+      .is('deleted_at', null)
+    const existing = existingRows?.[0]
+
+    let listItemId: string
+    if (existing) {
+      const unitsMatch = (existing.unit_id ?? null) === (ing.unit?.id ?? null)
+      if (unitsMatch && (existing.amount != null || ing.quantity != null)) {
+        const newAmount = (existing.amount ?? 0) + (ing.quantity ?? 0)
+        await supabase.from('list_items').update({ amount: newAmount }).eq('id', existing.id)
+      }
+      if (unitsMatch) mergedCount++
+      listItemId = existing.id
+    } else {
+      const { data: newRow } = await supabase
+        .from('list_items')
+        .insert({
+          list_id: listId,
+          item_id: ing.item.id,
+          name: ing.item.name,
+          amount: ing.quantity,
+          unit_id: ing.unit?.id ?? null,
+        })
+        .select('id')
+        .single()
+      if (!newRow) continue
+      listItemId = newRow.id
+      addedCount++
+    }
+
+    await supabase.from('list_item_sources').insert({
+      list_item_id: listItemId,
+      recipe_id: recipeId,
+      quantity: ing.quantity,
+      unit_id: ing.unit?.id ?? null,
+    })
+  }
+
+  addingToList.value = false
+  addToListResult.value = `Added to "${listName}": ${addedCount} new, ${mergedCount} merged.`
+  listPicker.value = null
+}
+
+// --- mark as cooked: deduct each ingredient from matching pantry stock,
+// exact item+unit match only - no conversion, mismatches are skipped ---
+
+const markingCooked = ref(false)
+const markCookedResult = ref('')
+
+async function markAsCooked() {
+  if (!ingredients.value) return
+  markingCooked.value = true
+  markCookedResult.value = ''
+  let deducted = 0
+  let skipped = 0
+
+  for (const ing of ingredients.value) {
+    if (!ing.item || ing.quantity == null) {
+      skipped++
+      continue
+    }
+    let query = supabase.from('inventory_items').select('id, quantity').eq('item_id', ing.item.id).is('deleted_at', null)
+    query = ing.unit?.id ? query.eq('unit_id', ing.unit.id) : query.is('unit_id', null)
+    const { data: matches } = await query
+    const match = matches?.[0]
+
+    if (match && match.quantity != null) {
+      const next = Math.max(0, match.quantity - ing.quantity)
+      await supabase.from('inventory_items').update({ quantity: next }).eq('id', match.id)
+      deducted++
+    } else {
+      skipped++
+    }
+  }
+
+  markingCooked.value = false
+  markCookedResult.value = `Deducted ${deducted} of ${ingredients.value.length} ingredients from pantry; ${skipped} skipped — no matching stock or unit.`
+}
+
 // --- ingredients ---
 
 type Ingredient = NonNullable<typeof ingredients.value>[number]
@@ -575,6 +711,29 @@ async function saveEditStep(id: string) {
           />
         </div>
         <UButton size="sm" variant="outline" :to="`/recipes/${recipeId}/cook`">Start cooking</UButton>
+
+        <UPopover>
+          <UButton size="sm" variant="outline">Add to list</UButton>
+          <template #content>
+            <div class="flex w-56 flex-col gap-2 p-3">
+              <UInputMenu
+                v-model="listPicker"
+                :items="activeLists ?? []"
+                create-item
+                label-key="name"
+                placeholder="Pick or create a list"
+                @create="onCreateListOption"
+              />
+              <UButton size="sm" block :loading="addingToList" @click="addRecipeToList">Add</UButton>
+            </div>
+          </template>
+        </UPopover>
+        <p v-if="addToListResult" class="text-muted max-w-40 text-right text-xs">{{ addToListResult }}</p>
+        <p v-if="addToListError" class="max-w-40 text-right text-xs text-red-500">{{ addToListError }}</p>
+
+        <UButton size="sm" variant="outline" :loading="markingCooked" @click="markAsCooked">Mark as cooked</UButton>
+        <p v-if="markCookedResult" class="text-muted max-w-40 text-right text-xs">{{ markCookedResult }}</p>
+
         <UButton size="sm" variant="outline" color="error" @click="deleteRecipe">Delete recipe</UButton>
       </div>
     </div>

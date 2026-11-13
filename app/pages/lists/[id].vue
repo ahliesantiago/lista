@@ -36,7 +36,8 @@ const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, 
     .from('list_items')
     .select(`
       id, name, amount, size, notes, is_done,
-      unit:units!list_items_unit_id_fkey(id, name_singular, name_plural)
+      unit:units!list_items_unit_id_fkey(id, name_singular, name_plural),
+      list_item_sources(quantity, unit:units(name_singular, name_plural), recipe:recipes(id, name))
     `)
     .eq('list_id', listId)
     .is('deleted_at', null)
@@ -88,6 +89,19 @@ tagOptions.value = tagOptionsInitial.value ?? []
 function unitLabel(unit: { name_singular: string; name_plural: string } | null, amount: number | null) {
   if (!unit) return ''
   return amount != null && amount !== 1 ? unit.name_plural : unit.name_singular
+}
+
+function sourcesLabel(
+  sources: { quantity: number | null; unit: { name_singular: string; name_plural: string } | null; recipe: { name: string } | null }[],
+) {
+  const withRecipe = sources.filter((s) => s.recipe)
+  if (withRecipe.length === 0) return ''
+  return withRecipe
+    .map((s) => {
+      const qty = s.quantity != null ? `${s.quantity} ${unitLabel(s.unit, s.quantity)}`.trim() : ''
+      return `${qty ? qty + ' ' : ''}from ${s.recipe!.name}`
+    })
+    .join(', ')
 }
 
 // --- editable header: name/description/notes/category/tags ---
@@ -436,6 +450,9 @@ async function deleteList() {
               </span>
               <span v-if="li.size" class="text-muted text-sm">({{ li.size }})</span>
               <span v-if="li.notes" class="text-muted block text-xs">{{ li.notes }}</span>
+              <span v-if="sourcesLabel(li.list_item_sources)" class="text-muted block text-xs">
+                {{ sourcesLabel(li.list_item_sources) }}
+              </span>
             </span>
           </label>
           <div class="flex items-center gap-1">
