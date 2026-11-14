@@ -594,7 +594,7 @@ async function saveEditStep(id: string) {
 
 <template>
   <div v-if="recipe" class="mx-auto max-w-2xl">
-    <div class="mb-4 flex items-start justify-between gap-4">
+    <div class="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
       <div v-if="viewMode === 'view'" class="flex-1">
         <img
           v-if="recipe.image_url && !imageLoadFailed"

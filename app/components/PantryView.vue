@@ -326,7 +326,7 @@ async function save() {
           <li
             v-for="p in loc.items"
             :key="p.id"
-            class="flex items-center justify-between rounded border border-default px-3 py-2"
+            class="flex flex-col items-start justify-between gap-2 rounded border border-default px-3 py-2 sm:flex-row sm:items-center"
           >
             <div class="flex-1 cursor-pointer" @click="openEdit(p)">
               <span class="font-medium">{{ p.item!.name }}</span>
@@ -370,7 +370,7 @@ async function save() {
               </UBadge>
               <p v-if="p.notes" class="text-muted text-xs">{{ p.notes }}</p>
             </div>
-            <div class="flex items-center gap-1" @click.stop>
+            <div class="flex flex-wrap items-center gap-1" @click.stop>
               <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
               <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
               <UInputMenu

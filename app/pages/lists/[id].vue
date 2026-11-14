@@ -343,7 +343,7 @@ async function deleteList() {
 
 <template>
   <div v-if="list" class="mx-auto max-w-2xl">
-    <div class="mb-4 flex items-start justify-between gap-4">
+    <div class="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
       <div v-if="viewMode === 'view'" class="flex-1">
         <h1 class="mb-1 text-lg font-semibold">{{ list.name }}</h1>
         <p v-if="list.description" class="text-muted mb-2 text-sm">{{ list.description }}</p>
@@ -409,7 +409,7 @@ async function deleteList() {
           />
         </UFormField>
       </div>
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex shrink-0 flex-wrap items-center gap-2">
         <UButton size="sm" variant="outline" @click="viewMode = viewMode === 'view' ? 'edit' : 'view'">
           {{ viewMode === 'view' ? 'Edit' : 'Done editing' }}
         </UButton>
@@ -437,7 +437,7 @@ async function deleteList() {
         v-model:add-to-master-list="addToMasterList"
         :item-options="itemOptions"
       />
-      <div class="grid grid-cols-3 gap-2">
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <UInputNumber v-model="amount" placeholder="Qty" :min="0" />
         <USelectMenu
           v-model="unitId"
@@ -483,7 +483,7 @@ async function deleteList() {
 
         <div v-else class="flex flex-col gap-2">
           <span class="font-medium">{{ li.name }}</span>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
             <USelectMenu
               v-model="editUnitId"
