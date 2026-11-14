@@ -137,6 +137,12 @@ const totalTime = ref<number | null>(recipe.value?.total_time_minutes ?? null)
 const isFavorite = ref(recipe.value?.is_favorite ?? false)
 const isInterested = ref(recipe.value?.is_interested ?? false)
 
+const viewMode = ref<'view' | 'edit'>('view')
+const imageLoadFailed = ref(false)
+watch(imageUrl, () => {
+  imageLoadFailed.value = false
+})
+
 const linkedCategories = recipe.value?.recipe_category_links.map((rc) => rc.recipe_categories!) ?? []
 const selectedCategories = ref<CategoryOption[]>(linkedCategories.filter((c) => !c.parent_id))
 const selectedSubcategories = ref<CategoryOption[]>(linkedCategories.filter((c) => c.parent_id))
@@ -589,7 +595,41 @@ async function saveEditStep(id: string) {
 <template>
   <div v-if="recipe" class="mx-auto max-w-2xl">
     <div class="mb-4 flex items-start justify-between gap-4">
-      <div class="flex-1">
+      <div v-if="viewMode === 'view'" class="flex-1">
+        <img
+          v-if="recipe.image_url && !imageLoadFailed"
+          :src="recipe.image_url"
+          alt=""
+          class="mb-3 max-h-72 w-full rounded object-cover"
+          @error="imageLoadFailed = true"
+        />
+        <h1 class="mb-1 text-lg font-semibold">{{ recipe.name }}</h1>
+        <p v-if="recipe.description" class="text-muted mb-2 text-sm">{{ recipe.description }}</p>
+        <a
+          v-if="recipe.source_url"
+          :href="recipe.source_url"
+          target="_blank"
+          rel="noopener"
+          class="text-primary mb-2 block text-sm underline"
+        >
+          Source
+        </a>
+        <p v-if="prepTime || cookTime || totalTime || servings" class="text-muted mb-2 text-sm">
+          <span v-if="prepTime">Prep {{ prepTime }}m</span>
+          <span v-if="cookTime"> &middot; Cook {{ cookTime }}m</span>
+          <span v-if="totalTime"> &middot; Total {{ totalTime }}m</span>
+          <span v-if="servings"> &middot; {{ servings }}</span>
+        </p>
+        <div class="flex flex-wrap gap-1">
+          <UBadge v-for="c in selectedCategories" :key="c.id" size="sm" variant="solid">{{ c.name }}</UBadge>
+          <UBadge v-for="c in selectedSubcategories" :key="c.id" size="sm" variant="subtle">{{ c.name }}</UBadge>
+          <UBadge v-for="t in recipeTags" :key="t.id" size="sm" variant="outline">{{ t.name }}</UBadge>
+          <UBadge v-for="e in recipeEquipment" :key="e.id" size="sm" variant="outline" color="neutral">
+            {{ e.name }}
+          </UBadge>
+        </div>
+      </div>
+      <div v-else class="flex-1">
         <UInput v-model="name" class="mb-2 w-full text-lg font-semibold" @blur="saveRecipeField({ name })" />
         <UTextarea
           v-model="description"
@@ -710,6 +750,13 @@ async function saveEditStep(id: string) {
             @click="toggleInterested"
           />
         </div>
+        <UButton
+          size="sm"
+          variant="outline"
+          @click="viewMode = viewMode === 'view' ? 'edit' : 'view'"
+        >
+          {{ viewMode === 'view' ? 'Edit' : 'Done editing' }}
+        </UButton>
         <UButton size="sm" variant="outline" :to="`/recipes/${recipeId}/cook`">Start cooking</UButton>
 
         <UPopover>
@@ -752,7 +799,7 @@ async function saveEditStep(id: string) {
               or: {{ ing.recipe_ingredient_alternatives.map((a) => a.item!.name).join(', ') }}
             </span>
           </span>
-          <div class="flex gap-1">
+          <div v-if="viewMode === 'edit'" class="flex gap-1">
             <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEditIngredient(ing)" />
             <UButton
               size="sm"
@@ -794,7 +841,11 @@ async function saveEditStep(id: string) {
       <li v-if="ingredients && ingredients.length === 0" class="text-muted text-sm">No ingredients yet.</li>
     </ul>
 
-    <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addIngredient">
+    <form
+      v-if="viewMode === 'edit'"
+      class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
+      @submit.prevent="addIngredient"
+    >
       <RecipeItemField v-model:item="ingredientItem" :item-options="itemOptions" />
       <div class="grid grid-cols-2 gap-2">
         <UInputNumber v-model="ingredientQuantity" placeholder="Qty" :min="0" />
@@ -829,7 +880,7 @@ async function saveEditStep(id: string) {
       >
         <div v-if="editingStepId !== step.id" class="flex items-center justify-between gap-2">
           <span><span class="text-muted">{{ index + 1 }}.</span> {{ step.instruction }}</span>
-          <div class="flex shrink-0 gap-1">
+          <div v-if="viewMode === 'edit'" class="flex shrink-0 gap-1">
             <UButton size="sm" variant="ghost" icon="i-lucide-chevron-up" @click="moveStep(index, -1)" />
             <UButton size="sm" variant="ghost" icon="i-lucide-chevron-down" @click="moveStep(index, 1)" />
             <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEditStep(step)" />
@@ -853,7 +904,7 @@ async function saveEditStep(id: string) {
       <li v-if="steps && steps.length === 0" class="text-muted text-sm">No steps yet.</li>
     </ul>
 
-    <form class="flex gap-2" @submit.prevent="addStep">
+    <form v-if="viewMode === 'edit'" class="flex gap-2" @submit.prevent="addStep">
       <UTextarea v-model="newStepText" placeholder="Add a step..." class="flex-1" />
       <UButton type="submit">Add</UButton>
     </form>

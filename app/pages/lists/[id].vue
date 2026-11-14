@@ -109,6 +109,9 @@ function sourcesLabel(
 const name = ref(list.value?.name ?? '')
 const description = ref(list.value?.description ?? '')
 const notes = ref(list.value?.notes ?? '')
+
+const viewMode = ref<'view' | 'edit'>('view')
+
 const linkedCategories = list.value?.list_categories.map((lc) => lc.categories!) ?? []
 const MAX_CATEGORIES = 2
 const MAX_SUBCATEGORIES = 2
@@ -341,7 +344,17 @@ async function deleteList() {
 <template>
   <div v-if="list" class="mx-auto max-w-2xl">
     <div class="mb-4 flex items-start justify-between gap-4">
-      <div class="flex-1">
+      <div v-if="viewMode === 'view'" class="flex-1">
+        <h1 class="mb-1 text-lg font-semibold">{{ list.name }}</h1>
+        <p v-if="list.description" class="text-muted mb-2 text-sm">{{ list.description }}</p>
+        <p v-if="list.notes" class="text-muted mb-2 text-sm">{{ list.notes }}</p>
+        <div class="flex flex-wrap gap-1">
+          <UBadge v-for="c in selectedCategories" :key="c.id" size="sm" variant="solid">{{ c.name }}</UBadge>
+          <UBadge v-for="c in selectedSubcategories" :key="c.id" size="sm" variant="subtle">{{ c.name }}</UBadge>
+          <UBadge v-for="t in listTags" :key="t.id" size="sm" variant="outline">{{ t.name }}</UBadge>
+        </div>
+      </div>
+      <div v-else class="flex-1">
         <UInput
           v-model="name"
           class="mb-2 w-full text-lg font-semibold"
@@ -397,6 +410,9 @@ async function deleteList() {
         </UFormField>
       </div>
       <div class="flex shrink-0 items-center gap-2">
+        <UButton size="sm" variant="outline" @click="viewMode = viewMode === 'view' ? 'edit' : 'view'">
+          {{ viewMode === 'view' ? 'Edit' : 'Done editing' }}
+        </UButton>
         <UButton v-if="list.status === 'active'" size="sm" variant="outline" @click="setStatus('archived')">
           Archive
         </UButton>
@@ -410,7 +426,11 @@ async function deleteList() {
       <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
     </div>
 
-    <form class="mb-6 flex flex-col gap-2 rounded border border-default p-3" @submit.prevent="addItem">
+    <form
+      v-if="viewMode === 'edit'"
+      class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
+      @submit.prevent="addItem"
+    >
       <ItemMasterListField
         :key="itemPickerKey"
         v-model:item="selectedItem"
@@ -455,7 +475,7 @@ async function deleteList() {
               </span>
             </span>
           </label>
-          <div class="flex items-center gap-1">
+          <div v-if="viewMode === 'edit'" class="flex items-center gap-1">
             <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(li)" />
             <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="removeItem(li.id)" />
           </div>

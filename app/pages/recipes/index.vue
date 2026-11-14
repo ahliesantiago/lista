@@ -18,7 +18,7 @@ const { data: recipes, refresh } = await useAsyncData('recipes', async () => {
   const { data, error } = await supabase
     .from('recipes')
     .select(`
-      id, name, prep_time_minutes, cook_time_minutes, is_favorite, is_interested,
+      id, name, image_url, prep_time_minutes, cook_time_minutes, is_favorite, is_interested,
       recipe_category_links(recipe_categories(id, name, parent_id)),
       recipe_tag_links(recipe_tags(id, name))
     `)
@@ -335,26 +335,34 @@ async function saveImportDraft() {
           :key="recipe.id"
           class="flex items-center justify-between rounded border border-default px-3 py-2"
         >
-          <NuxtLink :to="`/recipes/${recipe.id}`" class="flex-1">
-            <span class="font-medium">{{ recipe.name }}</span>
-            <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="ml-2 text-red-500" />
-            <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="ml-1 text-amber-500" />
-            <UBadge
-              v-for="rc in recipe.recipe_category_links"
-              :key="rc.recipe_categories!.id"
-              size="sm"
-              :variant="rc.recipe_categories!.parent_id ? 'subtle' : 'solid'"
-              class="ml-2"
-            >
-              {{ rc.recipe_categories!.name }}
-            </UBadge>
-            <UBadge v-for="t in recipe.recipe_tag_links" :key="t.recipe_tags!.id" size="sm" variant="outline" class="ml-2">
-              {{ t.recipe_tags!.name }}
-            </UBadge>
-            <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted ml-2 text-sm">
-              <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>
-              <span v-if="recipe.cook_time_minutes"> Cook {{ recipe.cook_time_minutes }}m</span>
-            </span>
+          <NuxtLink :to="`/recipes/${recipe.id}`" class="flex flex-1 items-center gap-2">
+            <img
+              v-if="recipe.image_url"
+              :src="recipe.image_url"
+              alt=""
+              class="h-10 w-10 shrink-0 rounded object-cover"
+              @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+            />
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="font-medium">{{ recipe.name }}</span>
+              <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="text-red-500" />
+              <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="text-amber-500" />
+              <UBadge
+                v-for="rc in recipe.recipe_category_links"
+                :key="rc.recipe_categories!.id"
+                size="sm"
+                :variant="rc.recipe_categories!.parent_id ? 'subtle' : 'solid'"
+              >
+                {{ rc.recipe_categories!.name }}
+              </UBadge>
+              <UBadge v-for="t in recipe.recipe_tag_links" :key="t.recipe_tags!.id" size="sm" variant="outline">
+                {{ t.recipe_tags!.name }}
+              </UBadge>
+              <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted text-sm">
+                <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>
+                <span v-if="recipe.cook_time_minutes"> Cook {{ recipe.cook_time_minutes }}m</span>
+              </span>
+            </div>
           </NuxtLink>
           <UButton
             size="sm"
