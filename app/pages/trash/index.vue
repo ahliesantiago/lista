@@ -288,8 +288,6 @@ async function refreshAll() {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <h1 class="mb-6 text-xl font-semibold">Trash</h1>
-
     <template v-for="section in [
       {
         label: 'Categories',

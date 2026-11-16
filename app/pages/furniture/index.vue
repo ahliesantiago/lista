@@ -101,8 +101,6 @@ async function saveEdit(id: string) {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <h1 class="mb-4 text-xl font-semibold">Furniture</h1>
-
     <form class="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4" @submit.prevent="addFurniture">
       <UInput v-model="newName" placeholder="Name (e.g. Sofa)" required class="col-span-2" />
       <UInput v-model="newBrand" placeholder="Brand (optional)" />

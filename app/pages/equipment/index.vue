@@ -152,8 +152,6 @@ async function saveEdit(id: string) {
 
 <template>
   <div class="mx-auto max-w-lg">
-    <h1 class="mb-4 text-xl font-semibold">Equipment</h1>
-
     <form class="mb-6 flex flex-col gap-2" @submit.prevent="addEquipment">
       <div class="flex flex-col gap-2 sm:flex-row">
         <UInput v-model="newName" placeholder="Equipment (e.g. Blender)" required class="flex-1" />

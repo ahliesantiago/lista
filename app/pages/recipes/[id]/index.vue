@@ -37,6 +37,14 @@ const { data: recipe } = await useAsyncData(`recipe-${recipeId}`, async () => {
   return data
 })
 
+const pageEntityName = usePageEntityName()
+watchEffect(() => {
+  pageEntityName.value = recipe.value?.name ?? null
+})
+onUnmounted(() => {
+  pageEntityName.value = null
+})
+
 const { data: steps, refresh: refreshSteps } = await useAsyncData(`recipe-steps-${recipeId}`, async () => {
   const { data, error } = await supabase
     .from('recipe_steps')
@@ -603,7 +611,6 @@ async function saveEditStep(id: string) {
           class="mb-3 max-h-72 w-full rounded object-cover"
           @error="imageLoadFailed = true"
         />
-        <h1 class="mb-1 text-lg font-semibold">{{ recipe.name }}</h1>
         <p v-if="recipe.description" class="text-muted mb-2 text-sm">{{ recipe.description }}</p>
         <a
           v-if="recipe.source_url"

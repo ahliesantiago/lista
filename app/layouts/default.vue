@@ -47,6 +47,12 @@ const sidebarCollapsed = ref(true)
 const mobileMoreOpen = ref(false)
 
 const route = useRoute()
+watch(
+  () => route.path,
+  () => {
+    mobileMoreOpen.value = false
+  },
+)
 const pageTitles: Record<string, string> = {
   '/': 'Home',
   '/lists': 'Lists',
@@ -70,12 +76,20 @@ const pageTitles: Record<string, string> = {
   '/reset-password': 'Set a new password',
   '/signup': 'Sign up',
 }
+const pageEntityName = usePageEntityName()
 const pageTitle = computed(() => {
-  if (route.path === '/') return pageTitles['/']
-  const match = Object.keys(pageTitles)
-    .filter((path) => path !== '/' && route.path.startsWith(path))
-    .sort((a, b) => b.length - a.length)[0]
-  return match ? pageTitles[match] : 'Lista'
+  const base = (() => {
+    if (route.path === '/') return pageTitles['/']
+    const match = Object.keys(pageTitles)
+      .filter((path) => path !== '/' && route.path.startsWith(path))
+      .sort((a, b) => b.length - a.length)[0]
+    return match ? pageTitles[match] : 'Lista'
+  })()
+  return pageEntityName.value ? `${base} — ${pageEntityName.value}` : base
+})
+
+useHead({
+  title: computed(() => `${pageTitle.value} - Lista`),
 })
 </script>
 
@@ -115,7 +129,17 @@ const pageTitle = computed(() => {
 
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header class="flex shrink-0 items-center justify-between border-b border-default px-4 py-3">
-        <h1 class="font-semibold">{{ pageTitle }}</h1>
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="user && route.path !== '/'"
+            to="/"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-home"
+            title="Go to dashboard"
+          />
+          <h1 class="font-semibold">{{ pageTitle }}</h1>
+        </div>
         <div v-if="user" class="flex items-center gap-2">
           <UDropdownMenu :items="headerMenuItems" class="hidden sm:block">
             <UButton variant="ghost" size="sm" icon="i-lucide-circle-user" />

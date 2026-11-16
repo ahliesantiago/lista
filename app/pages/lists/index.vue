@@ -57,8 +57,6 @@ async function deleteList(id: string) {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <h1 class="mb-4 text-xl font-semibold">Lists</h1>
-
     <form class="mb-6 flex gap-2" @submit.prevent="createList">
       <UInput v-model="newName" placeholder="New list name" required class="flex-1" />
       <UButton type="submit" :loading="creating">Add</UButton>

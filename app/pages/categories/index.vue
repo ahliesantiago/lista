@@ -93,8 +93,6 @@ async function saveEdit(id: string) {
 
 <template>
   <div class="mx-auto max-w-lg">
-    <h1 class="mb-4 text-xl font-semibold">Categories</h1>
-
     <form class="mb-6 flex flex-col gap-2" @submit.prevent="addCategory">
       <div class="flex gap-2">
         <UInput v-model="newName" placeholder="New category" required class="flex-1" />

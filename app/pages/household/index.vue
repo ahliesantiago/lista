@@ -30,8 +30,6 @@ const sections = [
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <h1 class="mb-6 text-xl font-semibold">Household</h1>
-
     <div class="flex flex-col gap-4">
       <div
         v-for="section in sections"
@@ -42,7 +40,7 @@ const sections = [
           <h2 class="font-medium">{{ section.label }}</h2>
           <p class="text-muted text-sm">{{ section.description }}</p>
         </div>
-        <UButton :to="section.to" variant="outline">Go to {{ section.label }}</UButton>
+        <UButton :to="section.to" variant="outline" class="w-20 shrink-0 justify-center">View</UButton>
       </div>
     </div>
   </div>

@@ -293,8 +293,7 @@ async function saveImportDraft() {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <div class="mb-4 flex items-center justify-between">
-      <h1 class="text-xl font-semibold">Recipes</h1>
+    <div class="mb-4 flex justify-end">
       <UButton to="/recipe-categories" variant="outline" size="sm">Manage recipe categories</UButton>
     </div>
 

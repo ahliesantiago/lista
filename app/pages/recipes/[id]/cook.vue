@@ -14,6 +14,14 @@ const { data: recipe } = await useAsyncData(`cook-recipe-${recipeId}`, async () 
   return data
 })
 
+const pageEntityName = usePageEntityName()
+watchEffect(() => {
+  pageEntityName.value = recipe.value?.name ? `Cooking: ${recipe.value.name}` : null
+})
+onUnmounted(() => {
+  pageEntityName.value = null
+})
+
 const { data: steps } = await useAsyncData(`cook-steps-${recipeId}`, async () => {
   const { data, error } = await supabase
     .from('recipe_steps')
@@ -49,8 +57,7 @@ const currentStepId = computed(() => steps.value?.find((s) => !checked.value[s.i
 
 <template>
   <div v-if="recipe" class="mx-auto max-w-2xl">
-    <div class="mb-4 flex items-center justify-between">
-      <h1 class="text-xl font-semibold">Cooking: {{ recipe.name }}</h1>
+    <div class="mb-4 flex justify-end">
       <UButton :to="`/recipes/${recipeId}`" variant="outline" size="sm">Back to recipe</UButton>
     </div>
 

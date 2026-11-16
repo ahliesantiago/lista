@@ -103,8 +103,6 @@ async function savePassword() {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <h1 class="mb-6 text-xl font-semibold">Settings</h1>
-
     <div class="flex flex-col gap-4">
       <div class="rounded border border-default px-4 py-3">
         <h2 class="mb-3 font-medium">Profile</h2>

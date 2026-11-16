@@ -31,6 +31,14 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
   return data
 })
 
+const pageEntityName = usePageEntityName()
+watchEffect(() => {
+  pageEntityName.value = list.value?.name ?? null
+})
+onUnmounted(() => {
+  pageEntityName.value = null
+})
+
 const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, async () => {
   const { data, error } = await supabase
     .from('list_items')
@@ -345,7 +353,6 @@ async function deleteList() {
   <div v-if="list" class="mx-auto max-w-2xl">
     <div class="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
       <div v-if="viewMode === 'view'" class="flex-1">
-        <h1 class="mb-1 text-lg font-semibold">{{ list.name }}</h1>
         <p v-if="list.description" class="text-muted mb-2 text-sm">{{ list.description }}</p>
         <p v-if="list.notes" class="text-muted mb-2 text-sm">{{ list.notes }}</p>
         <div class="flex flex-wrap gap-1">
