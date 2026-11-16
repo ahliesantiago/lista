@@ -2,11 +2,15 @@
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
-const { data: username } = await useAsyncData('current-username', async () => {
-  if (!user.value) return null
-  const { data } = await supabase.from('users').select('username').eq('id', user.value.id).single()
-  return data?.username ?? null
-})
+const { data: username } = await useAsyncData(
+  'current-username',
+  async () => {
+    if (!user.value) return null
+    const { data } = await supabase.from('users').select('username').eq('id', user.value.sub).single()
+    return data?.username ?? null
+  },
+  { watch: [user] },
+)
 
 async function signOut() {
   mobileMoreOpen.value = false
@@ -19,8 +23,8 @@ const headerMenuItems = computed(() => [
   [
     {
       type: 'label' as const,
-      label: username.value ?? user.value?.email ?? '',
-      description: username.value ? user.value?.email : undefined,
+      label: username.value || 'Account',
+      description: user.value?.email || undefined,
     },
   ],
   [{ label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }],
@@ -179,7 +183,8 @@ const pageTitle = computed(() => {
           </NuxtLink>
         </nav>
         <div class="mt-4 border-t border-default pt-4">
-          <p class="text-muted mb-2 text-sm">{{ username ?? user?.email }}</p>
+          <p class="text-sm font-medium">{{ username || 'Account' }}</p>
+          <p class="text-muted mb-2 text-sm">{{ user?.email }}</p>
           <UButton block variant="outline" @click="signOut">Sign out</UButton>
         </div>
       </template>
