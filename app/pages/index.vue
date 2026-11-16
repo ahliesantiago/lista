@@ -1,12 +1,91 @@
 <script setup lang="ts">
+const supabase = useSupabaseClient()
 const { data: currentSpace } = await useCurrentSpace()
+
+const { data: activeLists } = await useAsyncData('dashboard-lists', async () => {
+  const { data, error } = await supabase
+    .from('lists')
+    .select('id, name')
+    .eq('status', 'active')
+    .is('deleted_at', null)
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return data
+})
+
+const { data: lowStockItems } = await useAsyncData('dashboard-low-stock', async () => {
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('id, stock_status, item:items(name)')
+    .in('stock_status', ['low', 'out'])
+    .is('deleted_at', null)
+  if (error) throw error
+  return data
+})
+
+const { data: favoriteRecipes } = await useAsyncData('dashboard-favorite-recipes', async () => {
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id, name')
+    .eq('is_favorite', true)
+    .is('deleted_at', null)
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return data
+})
 </script>
 
 <template>
-  <div>
-    <h1 class="text-xl font-semibold">
-      Welcome to <span v-if="currentSpace">{{ currentSpace.name }}</span>
-    </h1>
-    <p v-if="!currentSpace" class="text-muted">No space found yet.</p>
+  <div class="mx-auto max-w-3xl">
+    <h2 class="mb-6 text-lg text-muted text-center">
+      Welcome back<span v-if="currentSpace"> to {{ currentSpace.name }}</span>
+    </h2>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div class="rounded border border-default p-4">
+        <h3 class="mb-2 font-medium">Lists</h3>
+        <p v-if="!activeLists?.length" class="text-muted mb-3 text-sm">No active lists yet.</p>
+        <ul v-else class="mb-3 flex flex-col gap-1 text-sm">
+          <li v-for="l in activeLists.slice(0, 3)" :key="l.id">
+            <NuxtLink :to="`/lists/${l.id}`" class="hover:text-primary">{{ l.name }}</NuxtLink>
+          </li>
+        </ul>
+        <p v-if="activeLists && activeLists.length > 3" class="text-muted mb-3 text-xs">
+          +{{ activeLists.length - 3 }} more
+        </p>
+        <UButton to="/lists" variant="outline" size="sm" block>View all lists</UButton>
+      </div>
+
+      <div class="rounded border border-default p-4">
+        <h3 class="mb-2 font-medium">Pantry alerts</h3>
+        <p v-if="!lowStockItems?.length" class="text-muted mb-3 text-sm">Everything's stocked.</p>
+        <ul v-else class="mb-3 flex flex-col gap-1 text-sm">
+          <li v-for="p in lowStockItems.slice(0, 3)" :key="p.id" class="flex items-center justify-between gap-2">
+            <span>{{ p.item?.name }}</span>
+            <UBadge size="sm" :color="p.stock_status === 'out' ? 'error' : 'warning'">
+              {{ p.stock_status === 'out' ? 'Out' : 'Low' }}
+            </UBadge>
+          </li>
+        </ul>
+        <p v-if="lowStockItems && lowStockItems.length > 3" class="text-muted mb-3 text-xs">
+          +{{ lowStockItems.length - 3 }} more
+        </p>
+        <UButton to="/pantry" variant="outline" size="sm" block>Go to pantry</UButton>
+      </div>
+
+      <div class="rounded border border-default p-4">
+        <h3 class="mb-2 font-medium">Favorite recipes</h3>
+        <p v-if="!favoriteRecipes?.length" class="text-muted mb-3 text-sm">No favorites yet.</p>
+        <ul v-else class="mb-3 flex flex-col gap-1 text-sm">
+          <li v-for="r in favoriteRecipes.slice(0, 3)" :key="r.id">
+            <NuxtLink :to="`/recipes/${r.id}`" class="hover:text-primary">{{ r.name }}</NuxtLink>
+          </li>
+        </ul>
+        <p v-if="favoriteRecipes && favoriteRecipes.length > 3" class="text-muted mb-3 text-xs">
+          +{{ favoriteRecipes.length - 3 }} more
+        </p>
+        <UButton to="/recipes" variant="outline" size="sm" block>View all recipes</UButton>
+      </div>
+    </div>
   </div>
 </template>
