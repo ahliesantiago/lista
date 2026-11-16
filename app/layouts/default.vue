@@ -66,6 +66,8 @@ const pageTitles: Record<string, string> = {
   '/trash': 'Trash',
   '/settings': 'Settings',
   '/login': 'Log in',
+  '/forgot-password': 'Reset password',
+  '/reset-password': 'Set a new password',
   '/signup': 'Sign up',
 }
 const pageTitle = computed(() => {

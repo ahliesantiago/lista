@@ -58,10 +58,13 @@ async function onSubmit() {
       </form>
 
       <template #footer>
-        <p class="text-sm">
-          No account?
-          <NuxtLink to="/signup" class="text-primary underline">Sign up</NuxtLink>
-        </p>
+        <div class="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            No account?
+            <NuxtLink to="/signup" class="text-primary underline">Sign up</NuxtLink>
+          </p>
+          <NuxtLink to="/forgot-password" class="text-primary underline">Forgot password?</NuxtLink>
+        </div>
       </template>
     </UCard>
   </div>
