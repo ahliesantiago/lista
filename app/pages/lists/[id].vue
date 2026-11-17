@@ -113,28 +113,25 @@ function onItemTreeChange() {
   persistItemOrder()
 }
 
-const isDragging = ref(false)
-const draggedItemId = ref<string | null>(null)
-function onDragStart(evt: { item: HTMLElement }) {
-  isDragging.value = true
-  draggedItemId.value = evt.item.dataset.id ?? null
-}
-function onDragEnd() {
-  isDragging.value = false
-  draggedItemId.value = null
+function indentItem(id: string) {
+  const index = itemTree.value.findIndex((p) => p.id === id)
+  if (index <= 0) return // nothing to nest under
+  const item = itemTree.value[index]!
+  if (item.children.length > 0) return // would push its own children to depth 3
+  const [removed] = itemTree.value.splice(index, 1)
+  itemTree.value[index - 1]!.children.push(removed as ListItemRow)
+  persistItemOrder()
 }
 
-// blocks dropping a parent-with-children into another parent's child zone -
-// without this, that single drag would silently create 3 levels of nesting
-// (the moved item's own children would become grandchildren)
-function checkMove(evt: { to: HTMLElement; draggedContext: { element: ListItemNode | ListItemRow } }) {
-  const dragged = evt.draggedContext.element as ListItemNode
-  if (dragged.children && dragged.children.length > 0) return false
-  // an item's own children zone sits directly below its own row, so it's
-  // physically possible to drag an item a few pixels into its own zone -
-  // block that specifically, or it'd become its own parent
-  if (evt.to.dataset.parentId === dragged.id) return false
-  return true
+function outdentItem(id: string, parentId: string) {
+  const parentIndex = itemTree.value.findIndex((p) => p.id === parentId)
+  if (parentIndex === -1) return
+  const parent = itemTree.value[parentIndex]!
+  const childIndex = parent.children.findIndex((c) => c.id === id)
+  if (childIndex === -1) return
+  const [child] = parent.children.splice(childIndex, 1)
+  itemTree.value.splice(parentIndex + 1, 0, { ...child!, children: [] })
+  persistItemOrder()
 }
 
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
@@ -354,8 +351,6 @@ async function addItem() {
       unit_id: unitIdValue,
       size: sizeValue,
       notes: notesValue,
-      // new items always start at the top level, appended at the end -
-      // nesting only happens afterward, via the indent button
       parent_id: null,
       sort_order: itemTree.value.length,
     })
@@ -620,15 +615,12 @@ async function deleteList() {
       item-key="id"
       tag="ul"
       class="flex flex-col gap-2"
-      group="list-items"
       handle=".drag-handle"
       :disabled="viewMode !== 'edit'"
-      @start="onDragStart"
-      @end="onDragEnd"
       @change="onItemTreeChange"
     >
       <template #item="{ element: li }">
-        <li :data-id="li.id">
+        <li>
           <div class="rounded border border-default px-3 py-2">
             <div v-if="editingItemId !== li.id" class="flex items-center justify-between">
               <div class="flex flex-1 items-center gap-1">
@@ -636,6 +628,14 @@ async function deleteList() {
                   v-if="viewMode === 'edit'"
                   name="i-lucide-grip-vertical"
                   class="drag-handle text-muted shrink-0 cursor-grab"
+                />
+                <UButton
+                  v-if="viewMode === 'edit' && itemTree.indexOf(li) > 0 && li.children.length === 0"
+                  size="sm"
+                  variant="ghost"
+                  icon="i-lucide-chevron-right"
+                  title="Nest under previous item"
+                  @click="indentItem(li.id)"
                 />
                 <label class="flex flex-1 items-center gap-3">
                   <UCheckbox :model-value="li.is_done" @update:model-value="toggleDone(li.id, li.is_done)" />
@@ -688,37 +688,31 @@ async function deleteList() {
           </div>
 
           <draggable
-            v-if="viewMode === 'edit' || li.children.length > 0"
+            v-if="li.children.length > 0"
             v-model="li.children"
             item-key="id"
             tag="ul"
-            :data-parent-id="li.id"
             class="ml-6 mt-2 flex flex-col gap-2"
-            :class="isDragging ? 'min-h-8' : ''"
-            group="list-items"
             handle=".drag-handle"
             :disabled="viewMode !== 'edit'"
-            :move="checkMove"
-            @start="onDragStart"
-            @end="onDragEnd"
             @change="onItemTreeChange"
           >
-            <template #footer>
-              <li
-                v-if="isDragging && li.children.length === 0 && li.id !== draggedItemId"
-                class="rounded border border-dashed border-default px-3 py-2 text-xs text-muted"
-              >
-                Drop here to nest under "{{ li.name }}"
-              </li>
-            </template>
             <template #item="{ element: child }">
-              <li :data-id="child.id" class="rounded border border-default px-3 py-2">
+              <li class="rounded border border-default px-3 py-2">
                 <div v-if="editingItemId !== child.id" class="flex items-center justify-between">
                   <div class="flex flex-1 items-center gap-1">
                     <UIcon
                       v-if="viewMode === 'edit'"
                       name="i-lucide-grip-vertical"
                       class="drag-handle text-muted shrink-0 cursor-grab"
+                    />
+                    <UButton
+                      v-if="viewMode === 'edit'"
+                      size="sm"
+                      variant="ghost"
+                      icon="i-lucide-chevron-left"
+                      title="Move to top level"
+                      @click="outdentItem(child.id, li.id)"
                     />
                     <label class="flex flex-1 items-center gap-3">
                       <UCheckbox
