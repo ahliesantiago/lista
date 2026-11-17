@@ -240,7 +240,8 @@ async function deleteItem(id: string) {
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <div class="mb-4 flex justify-end">
+    <div class="mb-4 flex justify-between">
+      <h1 class="text-lg font-semibold">Masterlist</h1>
       <UButton icon="i-lucide-plus" @click="openCreate">Add item</UButton>
     </div>
 

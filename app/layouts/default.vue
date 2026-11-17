@@ -18,7 +18,6 @@ async function signOut() {
   await navigateTo('/login')
 }
 
-const userMenuItems = [[{ label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }]]
 const headerMenuItems = computed(() => [
   [
     {
@@ -32,12 +31,12 @@ const headerMenuItems = computed(() => [
 ])
 
 const navLinks = [
-  { to: '/lists', label: 'Lists', icon: 'i-lucide-list-checks' },
-  { to: '/recipes', label: 'Recipes', icon: 'i-lucide-book-open' },
-  { to: '/items', label: 'Items', icon: 'i-lucide-package' },
+  { to: '/lists', label: 'Lists', icon: 'i-lucide-clipboard-list' },
+  { to: '/recipes', label: 'Recipes', icon: 'i-lucide-cooking-pot' },
+  { to: '/items', label: 'Items', icon: 'i-lucide-folder-cog' },
   { to: '/categories', label: 'Categories', icon: 'i-lucide-tags' },
   { to: '/units', label: 'Units', icon: 'i-lucide-ruler' },
-  { to: '/household', label: 'Household', icon: 'i-lucide-home' },
+  { to: '/household', label: 'Household', icon: 'i-lucide-house-plus' },
 ]
 
 const primaryMobileLinks = navLinks.filter((link) => ['/lists', '/recipes', '/items', '/household'].includes(link.to))
@@ -100,8 +99,7 @@ useHead({
       class="hidden shrink-0 flex-col overflow-y-auto border-r border-default px-3 py-4 transition-[width] duration-200 sm:flex"
       :class="sidebarCollapsed ? 'sm:w-16' : 'sm:w-56'"
     >
-      <div class="mb-2 flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
-        <NuxtLink v-if="!sidebarCollapsed" to="/" class="text-lg font-semibold">Lista</NuxtLink>
+      <div class="mb-2 flex items-center gap-1 px-1">
         <UButton
           variant="ghost"
           size="sm"
@@ -109,6 +107,7 @@ useHead({
           :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           @click="sidebarCollapsed = !sidebarCollapsed"
         />
+        <NuxtLink v-if="!sidebarCollapsed" to="/" class="text-lg font-semibold">Lista</NuxtLink>
       </div>
 
       <nav class="flex flex-1 flex-col gap-1">
@@ -118,7 +117,6 @@ useHead({
           :to="link.to"
           :title="sidebarCollapsed ? link.label : undefined"
           class="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-elevated"
-          :class="sidebarCollapsed ? 'justify-center' : ''"
           active-class="bg-elevated text-primary"
         >
           <UIcon :name="link.icon" class="size-5 shrink-0" />
@@ -130,14 +128,14 @@ useHead({
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header class="flex shrink-0 items-center justify-between border-b border-default px-4 py-3">
         <div class="flex items-center gap-2">
-          <UButton
+          <NuxtLink
             v-if="user && route.path !== '/'"
             to="/"
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-home"
-            title="Go to dashboard"
-          />
+            class="font-semibold"
+          >
+            Home
+          </NuxtLink>
+          <span v-if="user && route.path !== '/'">></span>
           <h1 class="font-semibold">{{ pageTitle }}</h1>
         </div>
         <div v-if="user" class="flex items-center gap-2">
