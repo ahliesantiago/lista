@@ -175,16 +175,9 @@ useHead({
           <h1 class="font-semibold">{{ pageTitle }}</h1>
         </div>
         <div v-if="user" class="flex items-center gap-2">
-          <UDropdownMenu :items="headerMenuItems" class="hidden sm:block">
+          <UDropdownMenu :items="headerMenuItems">
             <UButton variant="ghost" size="sm" icon="i-lucide-circle-user" />
           </UDropdownMenu>
-          <UButton
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-more-horizontal"
-            class="sm:hidden"
-            @click="mobileMoreOpen = true"
-          />
         </div>
       </header>
 
