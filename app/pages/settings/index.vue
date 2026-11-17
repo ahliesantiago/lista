@@ -102,7 +102,7 @@ async function savePassword() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl">
+  <div class="mx-auto max-w-2xl pb-12">
     <div class="flex flex-col gap-4">
       <div class="rounded border border-default px-4 py-3">
         <h2 class="mb-3 font-medium">Profile</h2>

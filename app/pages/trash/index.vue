@@ -265,6 +265,11 @@ async function destroy(table: string, id: string) {
   await refreshAll()
 }
 
+const expandedSections = ref<Record<string, boolean>>({})
+function toggleSection(label: string) {
+  expandedSections.value[label] = !expandedSections.value[label]
+}
+
 async function refreshAll() {
   await Promise.all([
     refreshCategories(),
@@ -288,6 +293,17 @@ async function refreshAll() {
 
 <template>
   <div class="mx-auto max-w-2xl">
+    <p class="mb-3 text-xs">
+      Deleted items are kept here until you remove them for good. "Delete Permanently"
+      can't be undone, and anything elsewhere still pointing at it (a recipe's ingredient,
+      a list's item) will lose that link rather than disappear itself.
+    </p>
+    <p class="mb-6 text-xs">
+      Restoring something also brings back anything that was removed along with it
+      (e.g. a list's items, or a location's pantry entries). Likewise, deleting something
+      permanently will also remove anything that was deleted along with it.
+    </p>
+
     <template v-for="section in [
       {
         label: 'Categories',
@@ -374,24 +390,36 @@ async function refreshAll() {
     ]" :key="section.label"
     >
       <div class="mb-6">
-        <h3 class="mb-2 text-sm font-semibold text-muted">{{ section.label }}</h3>
-        <p v-if="section.error" class="text-sm text-red-500">{{ section.error.message }}</p>
-        <ul v-else class="flex flex-col gap-2">
-          <li
-            v-for="row in section.rows"
-            :key="row.id"
-            class="flex items-center justify-between rounded border border-default px-3 py-2"
-          >
-            <span>{{ section.display(row) }}</span>
-            <div class="flex gap-2">
-              <UButton size="sm" variant="outline" @click="restore(section.table, row)">Restore</UButton>
-              <UButton size="sm" variant="outline" color="error" @click="destroy(section.table, row.id)">
-                Delete Permanently
-              </UButton>
-            </div>
-          </li>
-          <li v-if="section.rows && section.rows.length === 0" class="text-muted text-sm">Empty.</li>
-        </ul>
+        <button
+          type="button"
+          class="mb-2 flex w-full items-center justify-between text-left"
+          @click="toggleSection(section.label)"
+        >
+          <h3 class="text-sm font-semibold text-muted">{{ section.label }}</h3>
+          <UIcon
+            :name="expandedSections[section.label] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+            class="size-4 text-muted"
+          />
+        </button>
+        <template v-if="expandedSections[section.label]">
+          <p v-if="section.error" class="text-sm text-red-500">{{ section.error.message }}</p>
+          <ul v-else class="flex flex-col gap-2">
+            <li
+              v-for="row in section.rows"
+              :key="row.id"
+              class="flex items-center justify-between rounded border border-default px-3 py-2"
+            >
+              <span>{{ section.display(row) }}</span>
+              <div class="flex gap-2">
+                <UButton size="sm" variant="outline" @click="restore(section.table, row)">Restore</UButton>
+                <UButton size="sm" variant="outline" color="error" @click="destroy(section.table, row.id)">
+                  Delete Permanently
+                </UButton>
+              </div>
+            </li>
+            <li v-if="section.rows && section.rows.length === 0" class="text-muted text-sm">Empty.</li>
+          </ul>
+        </template>
       </div>
     </template>
   </div>
