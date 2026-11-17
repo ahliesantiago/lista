@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import draggable from 'vuedraggable'
+
 type Option = { id: string; name: string; plural_name?: string | null }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
@@ -529,6 +531,26 @@ async function saveEditIngredient(id: string) {
   await refreshIngredients()
 }
 
+let ingredientPersistQueue: Promise<unknown> = Promise.resolve()
+function persistIngredientOrder() {
+  ingredientPersistQueue = ingredientPersistQueue.then(async () => {
+    if (!ingredients.value) return
+    await Promise.all(
+      ingredients.value.map((ing) =>
+        supabase.from('recipe_ingredients').update({ sort_order: ing.sort_order }).eq('id', ing.id),
+      ),
+    )
+  })
+}
+
+function onIngredientReorder() {
+  if (!ingredients.value) return
+  ingredients.value.forEach((ing, i) => {
+    ing.sort_order = i
+  })
+  persistIngredientOrder()
+}
+
 // --- steps ---
 
 const newStepText = ref('')
@@ -794,60 +816,78 @@ async function saveEditStep(id: string) {
     </div>
 
     <h2 class="mb-2 text-lg font-semibold">Ingredients</h2>
-    <ul class="mb-4 flex flex-col gap-2">
-      <li v-for="ing in ingredients" :key="ing.id" class="rounded border border-default px-3 py-2">
-        <div v-if="editingIngredientId !== ing.id" class="flex items-center justify-between">
-          <span>
-            <span v-if="ing.quantity != null" class="text-muted text-sm">
-              {{ ing.quantity }}<span v-if="ing.unit">{{ ' ' + unitLabel(ing.unit, ing.quantity) }}</span>
+    <draggable
+      v-if="ingredients"
+      v-model="ingredients"
+      item-key="id"
+      tag="ul"
+      class="mb-4 flex flex-col gap-2"
+      handle=".drag-handle"
+      :disabled="viewMode !== 'edit'"
+      @change="onIngredientReorder"
+    >
+      <template #item="{ element: ing }">
+        <li class="rounded border border-default px-3 py-2">
+          <div v-if="editingIngredientId !== ing.id" class="flex items-center justify-between">
+            <span class="flex items-center gap-2">
+              <UIcon
+                v-if="viewMode === 'edit'"
+                name="i-lucide-grip-vertical"
+                class="drag-handle text-muted shrink-0 cursor-grab"
+              />
+              <span>
+                <span v-if="ing.quantity != null" class="text-muted text-sm">
+                  {{ ing.quantity }}<span v-if="ing.unit">{{ ' ' + unitLabel(ing.unit, ing.quantity) }}</span>
+                </span>
+                <span class="ml-1 font-medium">{{ ingredientDisplayName(ing) }}</span>
+                <span v-if="ing.note" class="text-muted text-sm">, {{ ing.note }}</span>
+                <span v-if="ing.recipe_ingredient_alternatives.length > 0" class="text-muted block text-xs">
+                  or: {{ ing.recipe_ingredient_alternatives.map((a) => a.item!.name).join(', ') }}
+                </span>
+              </span>
             </span>
-            <span class="ml-1 font-medium">{{ ingredientDisplayName(ing) }}</span>
-            <span v-if="ing.note" class="text-muted text-sm">, {{ ing.note }}</span>
-            <span v-if="ing.recipe_ingredient_alternatives.length > 0" class="text-muted block text-xs">
-              or: {{ ing.recipe_ingredient_alternatives.map((a) => a.item!.name).join(', ') }}
-            </span>
-          </span>
-          <div v-if="viewMode === 'edit'" class="flex gap-1">
-            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEditIngredient(ing)" />
-            <UButton
-              size="sm"
-              variant="ghost"
-              color="error"
-              icon="i-lucide-trash-2"
-              @click="deleteIngredient(ing.id)"
-            />
+            <div v-if="viewMode === 'edit'" class="flex gap-1">
+              <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEditIngredient(ing)" />
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="error"
+                icon="i-lucide-trash-2"
+                @click="deleteIngredient(ing.id)"
+              />
+            </div>
           </div>
-        </div>
-        <div v-else class="flex flex-col gap-2">
-          <UInput v-model="editIngredientName" placeholder="Item name" />
-          <div class="grid grid-cols-2 gap-2">
-            <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
+          <div v-else class="flex flex-col gap-2">
+            <UInput v-model="editIngredientName" placeholder="Item name" />
+            <div class="grid grid-cols-2 gap-2">
+              <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
+              <UInputMenu
+                v-model="editIngredientUnitId"
+                :items="unitOptions ?? []"
+                value-key="id"
+                label-key="name_singular"
+                :filter-fields="UNIT_FILTER_FIELDS"
+                placeholder="Unit"
+              />
+            </div>
+            <UInput v-model="editIngredientNote" placeholder="Note (optional)" />
             <UInputMenu
-              v-model="editIngredientUnitId"
-              :items="unitOptions ?? []"
-              value-key="id"
-              label-key="name_singular"
-              :filter-fields="UNIT_FILTER_FIELDS"
-              placeholder="Unit"
+              v-model="editIngredientAlternatives"
+              :items="itemOptions"
+              multiple
+              label-key="name"
+              :filter-fields="ITEM_FILTER_FIELDS"
+              placeholder="Alternatives (optional)"
             />
+            <div class="flex gap-2">
+              <UButton size="sm" @click="saveEditIngredient(ing.id)">Save</UButton>
+              <UButton size="sm" variant="ghost" @click="cancelEditIngredient">Cancel</UButton>
+            </div>
           </div>
-          <UInput v-model="editIngredientNote" placeholder="Note (optional)" />
-          <UInputMenu
-            v-model="editIngredientAlternatives"
-            :items="itemOptions"
-            multiple
-            label-key="name"
-            :filter-fields="ITEM_FILTER_FIELDS"
-            placeholder="Alternatives (optional)"
-          />
-          <div class="flex gap-2">
-            <UButton size="sm" @click="saveEditIngredient(ing.id)">Save</UButton>
-            <UButton size="sm" variant="ghost" @click="cancelEditIngredient">Cancel</UButton>
-          </div>
-        </div>
-      </li>
-      <li v-if="ingredients && ingredients.length === 0" class="text-muted text-sm">No ingredients yet.</li>
-    </ul>
+        </li>
+      </template>
+    </draggable>
+    <p v-if="ingredients && ingredients.length === 0" class="text-muted mb-4 text-sm">No ingredients yet.</p>
 
     <form
       v-if="viewMode === 'edit'"

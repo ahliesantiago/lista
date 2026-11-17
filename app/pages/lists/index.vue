@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import draggable from 'vuedraggable'
+
 type Option = { id: string; name: string }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 
@@ -9,7 +11,7 @@ const { data: lists, refresh } = await useAsyncData('lists', async () => {
   const { data, error } = await supabase
     .from('lists')
     .select(`
-      id, name, status, created_at,
+      id, name, status, created_at, sort_order,
       list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
@@ -57,6 +59,7 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems: visibleLists, g
   useListControls<ListRow>(
     filteredLists,
     {
+      custom: { label: 'Custom order', compare: (a, b) => a.sort_order - b.sort_order },
       'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.name.localeCompare(b.name) },
       'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.name.localeCompare(a.name) },
       'created-desc': { label: 'Newest first', compare: (a, b) => b.created_at.localeCompare(a.created_at) },
@@ -73,6 +76,31 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems: visibleLists, g
       },
     },
   )
+
+// custom order needs its own mutable local array - visibleLists is a
+// computed from useListControls and can't be a drag v-model target
+const customOrderList = ref<ListRow[]>([])
+watchEffect(() => {
+  if (sortBy.value === 'custom') {
+    customOrderList.value = [...visibleLists.value]
+  }
+})
+
+let listPersistQueue: Promise<unknown> = Promise.resolve()
+function persistListOrder() {
+  listPersistQueue = listPersistQueue.then(async () => {
+    await Promise.all(
+      customOrderList.value.map((l) => supabase.from('lists').update({ sort_order: l.sort_order }).eq('id', l.id)),
+    )
+  })
+}
+
+function onListReorder() {
+  customOrderList.value.forEach((l, i) => {
+    l.sort_order = i
+  })
+  persistListOrder()
+}
 
 const newName = ref('')
 const error = ref('')
@@ -169,7 +197,64 @@ async function deleteList(id: string) {
       </div>
     </div>
 
-    <template v-if="groupedLists">
+    <draggable
+      v-if="sortBy === 'custom'"
+      v-model="customOrderList"
+      item-key="id"
+      tag="ul"
+      class="flex flex-col gap-2"
+      handle=".drag-handle"
+      @change="onListReorder"
+    >
+      <template #item="{ element: list }">
+        <li class="flex items-center justify-between rounded border border-default px-3 py-2">
+          <UIcon name="i-lucide-grip-vertical" class="drag-handle mr-2 shrink-0 cursor-grab text-muted" />
+          <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
+            <span class="font-medium">{{ list.name }}</span>
+            <UBadge
+              v-for="lc in list.list_categories"
+              :key="lc.categories!.id"
+              size="sm"
+              :variant="lc.categories!.parent_id ? 'subtle' : 'solid'"
+              class="ml-2"
+            >
+              {{ lc.categories!.name }}
+            </UBadge>
+            <UBadge v-for="t in list.list_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
+              {{ t.tags!.name }}
+            </UBadge>
+          </NuxtLink>
+          <div class="flex items-center gap-2">
+            <UButton
+              v-if="list.status === 'active'"
+              size="sm"
+              variant="ghost"
+              icon="i-lucide-archive"
+              @click="setStatus(list.id, 'archived')"
+            />
+            <UButton
+              v-else
+              size="sm"
+              variant="ghost"
+              icon="i-lucide-archive-restore"
+              @click="setStatus(list.id, 'active')"
+            />
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-trash-2"
+              @click="deleteList(list.id)"
+            />
+          </div>
+        </li>
+      </template>
+      <template #footer>
+        <p v-if="customOrderList.length === 0" class="text-muted text-sm">No {{ statusFilter }} lists match.</p>
+      </template>
+    </draggable>
+
+    <template v-else-if="groupedLists">
       <div v-for="[groupName, groupLists] in groupedLists" :key="groupName" class="mb-4">
         <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
         <ul class="flex flex-col gap-2">

@@ -74,12 +74,22 @@ const {
 } = await useAsyncData('trash-list-items', async () => {
   const { data, error } = await supabase
     .from('list_items')
-    .select('id, name, deleted_at, list_id, list:lists(id, name, deleted_at)')
+    .select('id, name, deleted_at, list_id, parent_id, list:lists(id, name, deleted_at)')
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false })
   if (error) throw error
   return data
 })
+
+// same self-referencing-FK-embed limitation as categories above: resolve a
+// trashed item's parent item client-side via a flat id->row fetch instead
+// of a nested parent:list_items(...) embed
+const { data: allListItems } = await useAsyncData('trash-all-list-items', async () => {
+  const { data, error } = await supabase.from('list_items').select('id, name, deleted_at')
+  if (error) throw error
+  return data
+})
+const listItemById = computed(() => new Map((allListItems.value ?? []).map((li) => [li.id, li])))
 
 const {
   data: storageLocations,
@@ -228,12 +238,29 @@ async function restore(table: string, row: Record<string, any>) {
       .eq('list_id', row.id)
       .not('deleted_at', 'is', null)
     await refreshListItems()
-  } else if (table === 'list_items' && row.list?.deleted_at) {
-    // this item's parent list is still trashed, which would leave the
-    // restored item orphaned/unreachable - bring the list back too, but
-    // don't touch any of its other still-trashed items
-    await supabase.from('lists').update({ deleted_at: null }).eq('id', row.list_id)
-    await refreshLists()
+  } else if (table === 'list_items') {
+    // these two cascades are independent - a restored item can need its
+    // list AND its parent item brought back at the same time, so both run
+    // rather than one short-circuiting the other
+    if (row.list?.deleted_at) {
+      // this item's parent list is still trashed, which would leave the
+      // restored item orphaned/unreachable - bring the list back too, but
+      // don't touch any of its other still-trashed items
+      await supabase.from('lists').update({ deleted_at: null }).eq('id', row.list_id)
+      await refreshLists()
+    }
+    if (row.parent_id && listItemById.value.get(row.parent_id)?.deleted_at) {
+      // same orphan-prevention, one level down: this item's parent item is
+      // itself still trashed
+      await supabase.from('list_items').update({ deleted_at: null }).eq('id', row.parent_id)
+    }
+    // bring back any children that were cascade-trashed alongside this item
+    await supabase
+      .from('list_items')
+      .update({ deleted_at: null })
+      .eq('parent_id', row.id)
+      .not('deleted_at', 'is', null)
+    await refreshListItems()
   } else if (table === 'storage_locations') {
     // mirrors the lists -> list_items cascade above - goes through the
     // join table since a location is no longer a direct column
@@ -322,7 +349,11 @@ async function refreshAll() {
         table: 'list_items',
         rows: listItems,
         error: listItemsError,
-        display: (r: any) => `${r.name}${r.list ? ' (' + r.list.name + ')' : ''}`,
+        display: (r: any) => {
+          const parentName = r.parent_id ? listItemById.get(r.parent_id)?.name : null
+          const context = [r.list?.name, parentName && `sub-item of ${parentName}`].filter(Boolean).join(', ')
+          return `${r.name}${context ? ' (' + context + ')' : ''}`
+        },
       },
       {
         label: 'Storage Locations',

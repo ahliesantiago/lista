@@ -761,7 +761,9 @@ export type Database = {
           list_id: string
           name: string
           notes: string | null
+          parent_id: string | null
           size: string | null
+          sort_order: number
           unit_id: string | null
         }
         Insert: {
@@ -774,7 +776,9 @@ export type Database = {
           list_id: string
           name: string
           notes?: string | null
+          parent_id?: string | null
           size?: string | null
+          sort_order?: number
           unit_id?: string | null
         }
         Update: {
@@ -787,7 +791,9 @@ export type Database = {
           list_id?: string
           name?: string
           notes?: string | null
+          parent_id?: string | null
           size?: string | null
+          sort_order?: number
           unit_id?: string | null
         }
         Relationships: [
@@ -803,6 +809,13 @@ export type Database = {
             columns: ["list_id"]
             isOneToOne: false
             referencedRelation: "lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_items_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "list_items"
             referencedColumns: ["id"]
           },
           {
@@ -853,6 +866,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          sort_order: number
           space_id: string
           status: string
           updated_at: string
@@ -865,6 +879,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          sort_order?: number
           space_id: string
           status?: string
           updated_at?: string
@@ -877,6 +892,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          sort_order?: number
           space_id?: string
           status?: string
           updated_at?: string
