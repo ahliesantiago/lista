@@ -91,16 +91,17 @@ const pageTitles: Record<string, string> = {
   '/signup': 'Sign up',
 }
 const pageEntityName = usePageEntityName()
-const pageTitle = computed(() => {
-  const base = (() => {
-    if (route.path === '/') return pageTitles['/']
-    const match = Object.keys(pageTitles)
-      .filter((path) => path !== '/' && route.path.startsWith(path))
-      .sort((a, b) => b.length - a.length)[0]
-    return match ? pageTitles[match] : 'Lista'
-  })()
-  return pageEntityName.value ? `${base} — ${pageEntityName.value}` : base
+const basePath = computed(() => {
+  if (route.path === '/') return '/'
+  const match = Object.keys(pageTitles)
+    .filter((path) => path !== '/' && route.path.startsWith(path))
+    .sort((a, b) => b.length - a.length)[0]
+  return match ?? null
 })
+const baseTitle = computed(() => (basePath.value ? pageTitles[basePath.value] : 'Lista'))
+const pageTitle = computed(() =>
+  pageEntityName.value ? `${baseTitle.value} — ${pageEntityName.value}` : baseTitle.value,
+)
 
 useHead({
   title: computed(() => `${pageTitle.value} - Lista`),
@@ -172,7 +173,13 @@ useHead({
             Home
           </NuxtLink>
           <span v-if="user && route.path !== '/'">></span>
-          <h1 class="font-semibold">{{ pageTitle }}</h1>
+          <h1 class="font-semibold">
+            <NuxtLink v-if="pageEntityName && basePath" :to="basePath" class="hover:underline">
+              {{ baseTitle }}
+            </NuxtLink>
+            <template v-else>{{ baseTitle }}</template>
+            <span v-if="pageEntityName"> — {{ pageEntityName }}</span>
+          </h1>
         </div>
         <div v-if="user" class="flex items-center gap-2">
           <UDropdownMenu :items="headerMenuItems">
