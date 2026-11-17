@@ -50,6 +50,7 @@ const navLinks = [
       { to: '/rooms', label: 'Storage' },
     ],
   },
+  { to: '/trash', label: 'Trash', icon: 'i-lucide-trash-2' },
 ]
 
 const primaryMobileLinks = navLinks.filter((link) => ['/lists', '/recipes', '/items', '/household'].includes(link.to))

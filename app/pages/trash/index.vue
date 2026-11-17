@@ -292,9 +292,104 @@ async function destroy(table: string, id: string) {
   await refreshAll()
 }
 
+const sections = computed(() => [
+  {
+    label: 'Categories',
+    table: 'categories',
+    rows: categories.value,
+    error: categoriesError.value,
+    display: (r: any) =>
+      `${r.name}${r.parent_id ? ' (sub of ' + (categoryNameById.value.get(r.parent_id) ?? '?') + ')' : ''}`,
+  },
+  { label: 'Tags', table: 'tags', rows: tags.value, error: tagsError.value, display: (r: any) => r.name },
+  { label: 'Units', table: 'units', rows: units.value, error: unitsError.value, display: (r: any) => r.name_singular },
+  { label: 'Items', table: 'items', rows: items.value, error: itemsError.value, display: (r: any) => r.name },
+  { label: 'Lists', table: 'lists', rows: lists.value, error: listsError.value, display: (r: any) => r.name },
+  {
+    label: 'List Items',
+    table: 'list_items',
+    rows: listItems.value,
+    error: listItemsError.value,
+    display: (r: any) => {
+      const parentName = r.parent_id ? listItemById.value.get(r.parent_id)?.name : null
+      const context = [r.list?.name, parentName && `sub-item of ${parentName}`].filter(Boolean).join(', ')
+      return `${r.name}${context ? ' (' + context + ')' : ''}`
+    },
+  },
+  {
+    label: 'Storage Locations',
+    table: 'storage_locations',
+    rows: storageLocations.value,
+    error: storageLocationsError.value,
+    display: (r: any) => `${r.name}${r.room ? ' (' + r.room.name + ')' : ''}`,
+  },
+  { label: 'Rooms', table: 'rooms', rows: rooms.value, error: roomsError.value, display: (r: any) => r.name },
+  {
+    label: 'Inventory Items',
+    table: 'inventory_items',
+    rows: inventoryItems.value,
+    error: inventoryItemsError.value,
+    display: (r: any) => {
+      const loc = r.inventory_item_locations?.[0]?.storage_location
+      return `${r.item?.name ?? '?'}${loc ? ' (' + loc.name + ')' : ''}${
+        r.kind === 'household' ? ' [Household]' : ''
+      }`
+    },
+  },
+  {
+    label: 'Appliances',
+    table: 'appliances',
+    rows: appliances.value,
+    error: appliancesError.value,
+    display: (r: any) => r.name,
+  },
+  {
+    label: 'Furniture',
+    table: 'furniture',
+    rows: furniture.value,
+    error: furnitureError.value,
+    display: (r: any) => r.name,
+  },
+  {
+    label: 'Recipes',
+    table: 'recipes',
+    rows: recipes.value,
+    error: recipesError.value,
+    display: (r: any) => r.name,
+  },
+  {
+    label: 'Equipment',
+    table: 'equipment',
+    rows: equipmentRows.value,
+    error: equipmentError.value,
+    display: (r: any) => r.name,
+  },
+  {
+    label: 'Recipe Categories',
+    table: 'recipe_categories',
+    rows: recipeCategories.value,
+    error: recipeCategoriesError.value,
+    display: (r: any) =>
+      `${r.name}${r.parent_id ? ' (sub of ' + (recipeCategoryNameById.value.get(r.parent_id) ?? '?') + ')' : ''}`,
+  },
+  {
+    label: 'Recipe Tags',
+    table: 'recipe_tags',
+    rows: recipeTags.value,
+    error: recipeTagsError.value,
+    display: (r: any) => r.name,
+  },
+])
+
 const expandedSections = ref<Record<string, boolean>>({})
 function toggleSection(label: string) {
   expandedSections.value[label] = !expandedSections.value[label]
+}
+function expandAll() {
+  for (const s of sections.value) expandedSections.value[s.label] = true
+}
+function collapseAll() {
+  for (const s of sections.value) expandedSections.value[s.label] = false
 }
 
 async function refreshAll() {
@@ -331,95 +426,12 @@ async function refreshAll() {
       permanently will also remove anything that was deleted along with it.
     </p>
 
-    <template v-for="section in [
-      {
-        label: 'Categories',
-        table: 'categories',
-        rows: categories,
-        error: categoriesError,
-        display: (r: any) =>
-          `${r.name}${r.parent_id ? ' (sub of ' + (categoryNameById.get(r.parent_id) ?? '?') + ')' : ''}`,
-      },
-      { label: 'Tags', table: 'tags', rows: tags, error: tagsError, display: (r: any) => r.name },
-      { label: 'Units', table: 'units', rows: units, error: unitsError, display: (r: any) => r.name_singular },
-      { label: 'Items', table: 'items', rows: items, error: itemsError, display: (r: any) => r.name },
-      { label: 'Lists', table: 'lists', rows: lists, error: listsError, display: (r: any) => r.name },
-      {
-        label: 'List Items',
-        table: 'list_items',
-        rows: listItems,
-        error: listItemsError,
-        display: (r: any) => {
-          const parentName = r.parent_id ? listItemById.get(r.parent_id)?.name : null
-          const context = [r.list?.name, parentName && `sub-item of ${parentName}`].filter(Boolean).join(', ')
-          return `${r.name}${context ? ' (' + context + ')' : ''}`
-        },
-      },
-      {
-        label: 'Storage Locations',
-        table: 'storage_locations',
-        rows: storageLocations,
-        error: storageLocationsError,
-        display: (r: any) => `${r.name}${r.room ? ' (' + r.room.name + ')' : ''}`,
-      },
-      { label: 'Rooms', table: 'rooms', rows: rooms, error: roomsError, display: (r: any) => r.name },
-      {
-        label: 'Inventory Items',
-        table: 'inventory_items',
-        rows: inventoryItems,
-        error: inventoryItemsError,
-        display: (r: any) => {
-          const loc = r.inventory_item_locations?.[0]?.storage_location
-          return `${r.item?.name ?? '?'}${loc ? ' (' + loc.name + ')' : ''}${
-            r.kind === 'household' ? ' [Household]' : ''
-          }`
-        },
-      },
-      {
-        label: 'Appliances',
-        table: 'appliances',
-        rows: appliances,
-        error: appliancesError,
-        display: (r: any) => r.name,
-      },
-      {
-        label: 'Furniture',
-        table: 'furniture',
-        rows: furniture,
-        error: furnitureError,
-        display: (r: any) => r.name,
-      },
-      {
-        label: 'Recipes',
-        table: 'recipes',
-        rows: recipes,
-        error: recipesError,
-        display: (r: any) => r.name,
-      },
-      {
-        label: 'Equipment',
-        table: 'equipment',
-        rows: equipmentRows,
-        error: equipmentError,
-        display: (r: any) => r.name,
-      },
-      {
-        label: 'Recipe Categories',
-        table: 'recipe_categories',
-        rows: recipeCategories,
-        error: recipeCategoriesError,
-        display: (r: any) =>
-          `${r.name}${r.parent_id ? ' (sub of ' + (recipeCategoryNameById.get(r.parent_id) ?? '?') + ')' : ''}`,
-      },
-      {
-        label: 'Recipe Tags',
-        table: 'recipe_tags',
-        rows: recipeTags,
-        error: recipeTagsError,
-        display: (r: any) => r.name,
-      },
-    ]" :key="section.label"
-    >
+    <div class="mb-4 flex gap-2">
+      <UButton size="sm" variant="ghost" @click="expandAll">Expand all</UButton>
+      <UButton size="sm" variant="ghost" @click="collapseAll">Collapse all</UButton>
+    </div>
+
+    <template v-for="section in sections" :key="section.label">
       <div class="mb-6">
         <button
           type="button"
