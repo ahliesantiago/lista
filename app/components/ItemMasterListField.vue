@@ -24,17 +24,20 @@ const createItemConfig = computed(() => (hasExactMatch.value ? false : { when: '
 
 function onCreate(searchTerm: string) {
   item.value = { id: '', name: searchTerm }
-  confirmAction.value = !isEditingExistingLink.value
+  /**
+   * "Add to master list" checkbox state persists and resets to true only
+   * when adding an existing item to the list.
+   */
+  // editing an existing link: reset to the default each time, since it's a
+  // new item every time this opens. Adding new items to a list: leave it
+  // alone, so the user's choice carries over to the next item they add.
+  if (isEditingExistingLink.value) confirmAction.value = false
   itemPickerOpen.value = false
 }
 
-/**
- * Clears the item field and resets the checkbox to its default state
- * (checked for new items, unchecked for existing items).
- */
 function clear() {
   item.value = null
-  confirmAction.value = !isEditingExistingLink.value
+  if (isEditingExistingLink.value) confirmAction.value = false
 }
 </script>
 

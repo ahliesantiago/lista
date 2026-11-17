@@ -43,7 +43,7 @@ const { data: listItems, refresh } = await useAsyncData(`list-items-${listId}`, 
   const { data, error } = await supabase
     .from('list_items')
     .select(`
-      id, name, amount, size, notes, is_done,
+      id, name, amount, size, notes, is_done, item_id,
       unit:units!list_items_unit_id_fkey(id, name_singular, name_plural),
       list_item_sources(quantity, unit:units(name_singular, name_plural), recipe:recipes(id, name))
     `)
@@ -302,6 +302,8 @@ async function removeItem(id: string) {
 // --- edit item inline ---
 
 const editingItemId = ref<string | null>(null)
+const editName = ref('')
+const editIsListOnly = ref(false)
 const editAmount = ref<number | null>(null)
 const editUnitId = ref<string | null>(null)
 const editSize = ref('')
@@ -309,6 +311,8 @@ const editNotes = ref('')
 
 function startEdit(li: NonNullable<typeof listItems.value>[number]) {
   editingItemId.value = li.id
+  editName.value = li.name
+  editIsListOnly.value = !li.item_id
   editAmount.value = li.amount
   editUnitId.value = li.unit?.id ?? null
   extraEditUnitOption.value = li.unit ?? null
@@ -324,6 +328,7 @@ async function saveEdit(id: string) {
   await supabase
     .from('list_items')
     .update({
+      ...(editIsListOnly.value ? { name: editName.value.trim() } : {}),
       amount: editAmount.value,
       unit_id: editUnitId.value,
       size: editSize.value.trim() || null,
@@ -490,7 +495,8 @@ async function deleteList() {
         </div>
 
         <div v-else class="flex flex-col gap-2">
-          <span class="font-medium">{{ li.name }}</span>
+          <UInput v-if="editIsListOnly" v-model="editName" placeholder="Name" />
+          <span v-else class="font-medium">{{ li.name }}</span>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
             <USelectMenu
