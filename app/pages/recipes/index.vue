@@ -50,13 +50,84 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   return data as UnitOption[]
 })
 
-const filter = ref<'all' | 'favorites' | 'interested'>('all')
-const visibleRecipes = computed(() => {
-  if (!recipes.value) return []
-  if (filter.value === 'favorites') return recipes.value.filter((r) => r.is_favorite)
-  if (filter.value === 'interested') return recipes.value.filter((r) => r.is_interested)
-  return recipes.value
+type RecipeOption = { id: string; name: string; parent_id: string | null }
+type RecipeRow = NonNullable<typeof recipes.value>[number]
+
+const { data: recipeCategoryOptions } = await useAsyncData('recipe-category-options', async () => {
+  const { data, error } = await supabase
+    .from('recipe_categories')
+    .select('id, name, parent_id')
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+  return data as RecipeOption[]
 })
+
+const { data: recipeTagOptions } = await useAsyncData('recipe-tag-options', async () => {
+  const { data, error } = await supabase
+    .from('recipe_tags')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+  return data as Option[]
+})
+
+const filter = ref<'all' | 'favorites' | 'interested'>('all')
+const filterCategories = ref<RecipeOption[]>([])
+const filterTags = ref<Option[]>([])
+
+const filteredRecipes = computed(() => {
+  let list = recipes.value ?? []
+  if (filter.value === 'favorites') list = list.filter((r) => r.is_favorite)
+  if (filter.value === 'interested') list = list.filter((r) => r.is_interested)
+  if (filterCategories.value.length > 0) {
+    const ids = new Set(filterCategories.value.map((c) => c.id))
+    list = list.filter((r) => r.recipe_category_links.some((rc) => ids.has(rc.recipe_categories!.id)))
+  }
+  if (filterTags.value.length > 0) {
+    const ids = new Set(filterTags.value.map((t) => t.id))
+    list = list.filter((r) => r.recipe_tag_links.some((rt) => ids.has(rt.recipe_tags!.id)))
+  }
+  return list
+})
+
+const {
+  sortBy,
+  groupBy,
+  sortOptions,
+  groupOptions,
+  sortedItems: visibleRecipes,
+  groupedItems: groupedRecipes,
+} = useListControls<RecipeRow>(
+  filteredRecipes,
+  {
+    'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.name.localeCompare(b.name) },
+    'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.name.localeCompare(a.name) },
+    'prep-asc': {
+      label: 'Prep time (short to long)',
+      compare: (a, b) => (a.prep_time_minutes ?? Infinity) - (b.prep_time_minutes ?? Infinity),
+    },
+    'cook-asc': {
+      label: 'Cook time (short to long)',
+      compare: (a, b) => (a.cook_time_minutes ?? Infinity) - (b.cook_time_minutes ?? Infinity),
+    },
+  },
+  {
+    category: {
+      label: 'Category',
+      getKeys: (r) =>
+        r.recipe_category_links.length > 0
+          ? r.recipe_category_links.map((rc) => rc.recipe_categories!.name)
+          : ['Uncategorized'],
+    },
+    tag: {
+      label: 'Tag',
+      getKeys: (r) =>
+        r.recipe_tag_links.length > 0 ? r.recipe_tag_links.map((rt) => rt.recipe_tags!.name) : ['Untagged'],
+    },
+  },
+)
 
 const newName = ref('')
 const createError = ref('')
@@ -328,7 +399,91 @@ async function saveImportDraft() {
         </UButton>
       </div>
 
-      <ul class="flex flex-col gap-2">
+      <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label class="text-muted mb-1 block text-xs">Sort by</label>
+          <USelect v-model="sortBy" :items="sortOptions" class="w-full" />
+        </div>
+        <div>
+          <label class="text-muted mb-1 block text-xs">Group by</label>
+          <USelect v-model="groupBy" :items="groupOptions" class="w-full" />
+        </div>
+        <div>
+          <label class="text-muted mb-1 block text-xs">Filter by category</label>
+          <UInputMenu
+            v-model="filterCategories"
+            :items="recipeCategoryOptions ?? []"
+            multiple
+            label-key="name"
+            placeholder="Any category"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <label class="text-muted mb-1 block text-xs">Filter by tag</label>
+          <UInputMenu
+            v-model="filterTags"
+            :items="recipeTagOptions ?? []"
+            multiple
+            label-key="name"
+            placeholder="Any tag"
+            class="w-full"
+          />
+        </div>
+      </div>
+
+      <template v-if="groupedRecipes">
+        <div v-for="[groupName, groupRecipes] in groupedRecipes" :key="groupName" class="mb-4">
+          <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
+          <ul class="flex flex-col gap-2">
+            <li
+              v-for="recipe in groupRecipes"
+              :key="recipe.id"
+              class="flex items-center justify-between rounded border border-default px-3 py-2"
+            >
+              <NuxtLink :to="`/recipes/${recipe.id}`" class="flex flex-1 items-center gap-2">
+                <img
+                  v-if="recipe.image_url"
+                  :src="recipe.image_url"
+                  alt=""
+                  class="h-10 w-10 shrink-0 rounded object-cover"
+                  @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+                />
+                <div class="flex flex-wrap items-center gap-1">
+                  <span class="font-medium">{{ recipe.name }}</span>
+                  <UIcon v-if="recipe.is_favorite" name="i-lucide-heart" class="text-red-500" />
+                  <UIcon v-if="recipe.is_interested" name="i-lucide-bookmark" class="text-amber-500" />
+                  <UBadge
+                    v-for="rc in recipe.recipe_category_links"
+                    :key="rc.recipe_categories!.id"
+                    size="sm"
+                    :variant="rc.recipe_categories!.parent_id ? 'subtle' : 'solid'"
+                  >
+                    {{ rc.recipe_categories!.name }}
+                  </UBadge>
+                  <UBadge v-for="t in recipe.recipe_tag_links" :key="t.recipe_tags!.id" size="sm" variant="outline">
+                    {{ t.recipe_tags!.name }}
+                  </UBadge>
+                  <span v-if="recipe.prep_time_minutes || recipe.cook_time_minutes" class="text-muted text-sm">
+                    <span v-if="recipe.prep_time_minutes">Prep {{ recipe.prep_time_minutes }}m</span>
+                    <span v-if="recipe.cook_time_minutes"> Cook {{ recipe.cook_time_minutes }}m</span>
+                  </span>
+                </div>
+              </NuxtLink>
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="error"
+                icon="i-lucide-trash-2"
+                @click="deleteRecipe(recipe.id)"
+              />
+            </li>
+          </ul>
+        </div>
+        <p v-if="groupedRecipes.length === 0" class="text-muted text-sm">No recipes match.</p>
+      </template>
+
+      <ul v-else class="flex flex-col gap-2">
         <li
           v-for="recipe in visibleRecipes"
           :key="recipe.id"
@@ -371,7 +526,7 @@ async function saveImportDraft() {
             @click="deleteRecipe(recipe.id)"
           />
         </li>
-        <li v-if="visibleRecipes.length === 0" class="text-muted text-sm">No recipes yet.</li>
+        <li v-if="visibleRecipes.length === 0" class="text-muted text-sm">No recipes match.</li>
       </ul>
     </template>
 

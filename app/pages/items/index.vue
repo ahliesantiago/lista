@@ -64,6 +64,48 @@ const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () =
 })
 tagOptions.value = tagOptionsInitial.value ?? []
 
+const filterCategories = ref<CategoryOption[]>([])
+const filterTags = ref<Option[]>([])
+
+type ItemRow = NonNullable<typeof items.value>[number]
+
+const filteredItems = computed(() => {
+  let list = items.value ?? []
+  if (filterCategories.value.length > 0) {
+    const ids = new Set(filterCategories.value.map((c) => c.id))
+    list = list.filter((item) => item.item_categories.some((ic) => ids.has(ic.categories!.id)))
+  }
+  if (filterTags.value.length > 0) {
+    const ids = new Set(filterTags.value.map((t) => t.id))
+    list = list.filter((item) => item.item_tags.some((it) => ids.has(it.tags!.id)))
+  }
+  return list
+})
+
+const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } = useListControls<ItemRow>(
+  filteredItems,
+  {
+    'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.name.localeCompare(b.name) },
+    'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.name.localeCompare(a.name) },
+    'price-asc': { label: 'Price (low to high)', compare: (a, b) => (a.price ?? Infinity) - (b.price ?? Infinity) },
+    'price-desc': {
+      label: 'Price (high to low)',
+      compare: (a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity),
+    },
+  },
+  {
+    category: {
+      label: 'Category',
+      getKeys: (item) =>
+        item.item_categories.length > 0 ? item.item_categories.map((ic) => ic.categories!.name) : ['Uncategorized'],
+    },
+    tag: {
+      label: 'Tag',
+      getKeys: (item) => (item.item_tags.length > 0 ? item.item_tags.map((it) => it.tags!.name) : ['Untagged']),
+    },
+  },
+)
+
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
 const name = ref('')
@@ -247,9 +289,81 @@ async function deleteItem(id: string) {
 
     <p v-if="itemsError" class="mb-4 text-sm text-red-500">{{ itemsError.message }}</p>
 
-    <ul class="flex flex-col gap-2">
+    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div>
+        <label class="text-muted mb-1 block text-xs">Sort by</label>
+        <USelect v-model="sortBy" :items="sortOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Group by</label>
+        <USelect v-model="groupBy" :items="groupOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by category</label>
+        <UInputMenu
+          v-model="filterCategories"
+          :items="categoryOptions ?? []"
+          multiple
+          label-key="name"
+          placeholder="Any category"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by tag</label>
+        <UInputMenu
+          v-model="filterTags"
+          :items="tagOptions"
+          multiple
+          label-key="name"
+          placeholder="Any tag"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <template v-if="groupedItems">
+      <div v-for="[groupName, groupItems] in groupedItems" :key="groupName" class="mb-4">
+        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
+        <ul class="flex flex-col gap-2">
+          <li
+            v-for="item in groupItems"
+            :key="item.id"
+            class="flex cursor-pointer items-center justify-between rounded border border-default px-3 py-2"
+            @click="openEdit(item)"
+          >
+            <div>
+              <span class="font-medium">{{ item.name }}</span>
+              <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
+              <UBadge
+                v-for="ic in item.item_categories"
+                :key="ic.categories!.id"
+                size="sm"
+                :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                class="ml-2"
+              >
+                {{ ic.categories!.name }}
+              </UBadge>
+              <UBadge v-for="t in item.item_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
+                {{ t.tags!.name }}
+              </UBadge>
+            </div>
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-trash-2"
+              @click.stop="deleteItem(item.id)"
+            />
+          </li>
+        </ul>
+      </div>
+      <p v-if="groupedItems.length === 0" class="text-muted text-sm">No items match.</p>
+    </template>
+
+    <ul v-else class="flex flex-col gap-2">
       <li
-        v-for="item in items"
+        v-for="item in sortedItems"
         :key="item.id"
         class="flex cursor-pointer items-center justify-between rounded border border-default px-3 py-2"
         @click="openEdit(item)"
@@ -278,7 +392,7 @@ async function deleteItem(id: string) {
           @click.stop="deleteItem(item.id)"
         />
       </li>
-      <li v-if="items && items.length === 0" class="text-muted text-sm">No items yet.</li>
+      <li v-if="sortedItems.length === 0" class="text-muted text-sm">No items match.</li>
     </ul>
 
     <USlideover v-model:open="slideoverOpen" :title="editingId ? 'Edit item' : 'Add item'">
