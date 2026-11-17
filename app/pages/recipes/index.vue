@@ -147,7 +147,7 @@ async function createRecipe() {
     createError.value = insertError?.message ?? 'Failed to create recipe'
     return
   }
-  await navigateTo(`/recipes/${data.id}`)
+  await navigateTo(`/recipes/${data.id}?new=1`)
 }
 
 async function deleteRecipe(id: string) {

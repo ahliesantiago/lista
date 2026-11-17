@@ -13,6 +13,15 @@ const confirmAction = defineModel<boolean>('addToMasterList', { default: true })
 const itemPickerOpen = ref(false)
 const isEditingExistingLink = computed(() => !!props.originalItem)
 
+// Show "Create" unless the typed text exactly matches an existing item's name (case-insensitive)
+const searchTerm = ref('')
+const hasExactMatch = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+  if (!term) return false
+  return props.itemOptions.some((o) => o.name.toLowerCase() === term)
+})
+const createItemConfig = computed(() => (hasExactMatch.value ? false : { when: 'always' as const, position: 'bottom' as const }))
+
 function onCreate(searchTerm: string) {
   item.value = { id: '', name: searchTerm }
   confirmAction.value = !isEditingExistingLink.value
@@ -35,8 +44,9 @@ function clear() {
       <UInputMenu
         v-model="item"
         v-model:open="itemPickerOpen"
+        v-model:search-term="searchTerm"
         :items="itemOptions"
-        create-item
+        :create-item="createItemConfig"
         label-key="name"
         :filter-fields="ITEM_FILTER_FIELDS"
         placeholder="Item name"

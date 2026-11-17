@@ -94,7 +94,7 @@ async function createList() {
   }
   // leave `creating` true until navigation completes, so the button stays
   // disabled for the whole transition instead of re-enabling momentarily
-  await navigateTo(`/lists/${data.id}`)
+  await navigateTo(`/lists/${data.id}?new=1`)
 }
 
 async function setStatus(id: string, status: 'active' | 'archived') {

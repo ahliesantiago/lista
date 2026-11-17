@@ -145,7 +145,7 @@ const totalTime = ref<number | null>(recipe.value?.total_time_minutes ?? null)
 const isFavorite = ref(recipe.value?.is_favorite ?? false)
 const isInterested = ref(recipe.value?.is_interested ?? false)
 
-const viewMode = ref<'view' | 'edit'>('view')
+const viewMode = ref<'view' | 'edit'>(route.query.new === '1' ? 'edit' : 'view')
 const imageLoadFailed = ref(false)
 watch(imageUrl, () => {
   imageLoadFailed.value = false

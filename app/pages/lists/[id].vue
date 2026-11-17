@@ -118,7 +118,7 @@ const name = ref(list.value?.name ?? '')
 const description = ref(list.value?.description ?? '')
 const notes = ref(list.value?.notes ?? '')
 
-const viewMode = ref<'view' | 'edit'>('view')
+const viewMode = ref<'view' | 'edit'>(route.query.new === '1' ? 'edit' : 'view')
 
 const linkedCategories = list.value?.list_categories.map((lc) => lc.categories!) ?? []
 const MAX_CATEGORIES = 2
