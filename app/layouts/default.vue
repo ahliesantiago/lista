@@ -34,7 +34,8 @@ const navLinks = [
   { to: '/lists', label: 'Lists', icon: 'i-lucide-clipboard-list' },
   { to: '/recipes', label: 'Recipes', icon: 'i-lucide-cooking-pot' },
   { to: '/items', label: 'Items', icon: 'i-lucide-folder-cog' },
-  { to: '/categories', label: 'Categories', icon: 'i-lucide-tags' },
+  { to: '/categories', label: 'Categories', icon: 'i-lucide-folder-tree' },
+  { to: '/tags', label: 'Tags', icon: 'i-lucide-tags' },
   { to: '/units', label: 'Units', icon: 'i-lucide-ruler' },
   { to: '/household', label: 'Household', icon: 'i-lucide-house-plus' },
 ]
@@ -58,6 +59,7 @@ const pageTitles: Record<string, string> = {
   '/recipes': 'Recipes',
   '/items': 'Items',
   '/categories': 'Categories',
+  '/tags': 'Tags',
   '/units': 'Units',
   '/household': 'Household',
   '/pantry': 'Pantry',
