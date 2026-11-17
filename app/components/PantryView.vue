@@ -2,6 +2,7 @@
 const props = defineProps<{ kind: 'pantry' | 'household' }>()
 
 type Option = { id: string; name: string; plural_name?: string | null }
+type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = { id: string; name_singular: string; name_plural: string }
 const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural']
 const ITEM_FILTER_FIELDS = ['name', 'plural_name']
@@ -95,6 +96,16 @@ const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   return data
 })
 
+const { data: categoryOptions } = await useAsyncData('category-options', async () => {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, parent_id')
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+  return data as CategoryOption[]
+})
+
 const { data: activeLists } = await useAsyncData('pantry-active-lists', async () => {
   const { data, error } = await supabase
     .from('lists')
@@ -121,9 +132,57 @@ function primaryLocation(p: InventoryItem) {
   return p.inventory_item_locations[0]?.storage_location ?? null
 }
 
-const groupedItems = computed(() => {
+const filterCategories = ref<CategoryOption[]>([])
+const filterStockStatuses = ref<StockStatusLabel[]>([])
+
+const filteredInventoryItems = computed(() => {
+  let list = inventoryItems.value ?? []
+  if (filterCategories.value.length > 0) {
+    const ids = new Set(filterCategories.value.map((c) => c.id))
+    list = list.filter((p) => p.item!.item_categories.some((ic) => ids.has(ic.categories!.id)))
+  }
+  if (filterStockStatuses.value.length > 0) {
+    const dbStatuses = new Set(filterStockStatuses.value.map((s) => STOCK_STATUS_TO_DB[s]))
+    list = list.filter((p) => dbStatuses.has(p.stock_status))
+  }
+  return list
+})
+
+const {
+  sortBy,
+  groupBy,
+  sortOptions,
+  groupOptions: groupOptionsBase,
+  sortedItems: sortedInventoryItems,
+  groupedItems: groupedByCategoryOrStock,
+} = useListControls<InventoryItem>(
+  filteredInventoryItems,
+  {
+    'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.item!.name.localeCompare(b.item!.name) },
+    'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.item!.name.localeCompare(a.item!.name) },
+    'quantity-asc': { label: 'Quantity (low to high)', compare: (a, b) => (a.quantity ?? 0) - (b.quantity ?? 0) },
+    'quantity-desc': { label: 'Quantity (high to low)', compare: (a, b) => (b.quantity ?? 0) - (a.quantity ?? 0) },
+  },
+  {
+    category: {
+      label: 'Category',
+      getKeys: (p) =>
+        p.item!.item_categories.length > 0
+          ? p.item!.item_categories.map((ic) => ic.categories!.name)
+          : ['Uncategorized'],
+    },
+    'stock-status': {
+      label: 'Stock status',
+      getKeys: (p) => [p.stock_status ? DB_TO_STOCK_STATUS[p.stock_status] : 'No status'],
+    },
+  },
+)
+groupBy.value = 'location'
+const groupOptions = [{ value: 'location', label: 'Location' }, ...groupOptionsBase]
+
+const groupedByLocation = computed(() => {
   const roomMap = new Map<string, Map<string, InventoryItem[]>>()
-  for (const p of inventoryItems.value ?? []) {
+  for (const p of sortedInventoryItems.value) {
     const loc = primaryLocation(p)
     const roomLabel = loc ? loc.room?.name || 'Other' : p.inventory_item_rooms[0]?.room?.name ?? 'Unassigned'
     const locName = loc ? loc.name : 'No location set'
@@ -318,13 +377,124 @@ async function save() {
       </div>
     </div>
 
-    <div v-for="group in groupedItems" :key="group.room" class="mb-6">
-      <h2 class="mb-2 text-sm font-semibold text-muted">{{ group.room }}</h2>
-      <div v-for="loc in group.locations" :key="loc.name" class="mb-4">
-        <h3 class="mb-2 text-sm text-muted">{{ loc.name }}</h3>
+    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div>
+        <label class="text-muted mb-1 block text-xs">Sort by</label>
+        <USelect v-model="sortBy" :items="sortOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Group by</label>
+        <USelect v-model="groupBy" :items="groupOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by category</label>
+        <UInputMenu
+          v-model="filterCategories"
+          :items="categoryOptions ?? []"
+          multiple
+          label-key="name"
+          placeholder="Any category"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by stock status</label>
+        <UInputMenu
+          v-model="filterStockStatuses"
+          :items="STOCK_STATUS_LABELS"
+          multiple
+          placeholder="Any status"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <template v-if="groupBy === 'location'">
+      <div v-for="group in groupedByLocation" :key="group.room" class="mb-6">
+        <h2 class="mb-2 text-sm font-semibold text-muted">{{ group.room }}</h2>
+        <div v-for="loc in group.locations" :key="loc.name" class="mb-4">
+          <h3 class="mb-2 text-sm text-muted">{{ loc.name }}</h3>
+          <ul class="flex flex-col gap-2">
+            <li
+              v-for="p in loc.items"
+              :key="p.id"
+              class="flex flex-col items-start justify-between gap-2 rounded border border-default px-3 py-2 sm:flex-row sm:items-center"
+            >
+              <div class="flex-1 cursor-pointer" @click="openEdit(p)">
+                <span class="font-medium">{{ p.item!.name }}</span>
+                <UBadge
+                  v-for="ic in p.item!.item_categories"
+                  :key="ic.categories!.id"
+                  size="sm"
+                  :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                  class="ml-2"
+                >
+                  {{ ic.categories!.name }}
+                </UBadge>
+                <UBadge
+                  v-if="p.stock_status"
+                  size="sm"
+                  :color="p.stock_status === 'out' ? 'error' : p.stock_status === 'low' ? 'warning' : 'success'"
+                  class="ml-2"
+                >
+                  {{ DB_TO_STOCK_STATUS[p.stock_status] }}
+                </UBadge>
+                <span v-if="p.quantity != null" class="text-muted ml-2 text-sm">
+                  {{ p.quantity }}<span v-if="p.unit">{{ ' ' + unitLabel(p.unit, p.quantity) }}</span>
+                </span>
+                <UBadge
+                  v-for="il in p.inventory_item_locations"
+                  :key="il.storage_location!.id"
+                  size="sm"
+                  variant="outline"
+                  class="ml-2"
+                >
+                  {{ il.storage_location!.name }}
+                </UBadge>
+                <UBadge
+                  v-for="ir in p.inventory_item_rooms"
+                  :key="ir.room!.id"
+                  size="sm"
+                  variant="outline"
+                  class="ml-2"
+                >
+                  {{ ir.room!.name }}
+                </UBadge>
+                <p v-if="p.notes" class="text-muted text-xs">{{ p.notes }}</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1" @click.stop>
+                <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
+                <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
+                <UInputMenu
+                  :model-value="addListSelection[p.id] ?? null"
+                  :items="activeLists ?? []"
+                label-key="name"
+                placeholder="Add to list..."
+                class="w-36"
+                @update:model-value="(val) => onPickListForItem(p, val)"
+              />
+              <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="openEdit(p)" />
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="error"
+                icon="i-lucide-trash-2"
+                @click="deleteInventoryItem(p.id)"
+              />
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p v-if="groupedByLocation.length === 0" class="text-muted text-sm">{{ emptyLabel }}</p>
+    </template>
+
+    <template v-else-if="groupBy !== 'none'">
+      <div v-for="[groupName, groupItems] in groupedByCategoryOrStock ?? []" :key="groupName" class="mb-6">
+        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
         <ul class="flex flex-col gap-2">
           <li
-            v-for="p in loc.items"
+            v-for="p in groupItems"
             :key="p.id"
             class="flex flex-col items-start justify-between gap-2 rounded border border-default px-3 py-2 sm:flex-row sm:items-center"
           >
@@ -393,10 +563,82 @@ async function save() {
           </li>
         </ul>
       </div>
-    </div>
-    <p v-if="inventoryItems && inventoryItems.length === 0" class="text-muted text-sm">
-      {{ emptyLabel }}
-    </p>
+      <p v-if="(groupedByCategoryOrStock?.length ?? 0) === 0" class="text-muted text-sm">{{ emptyLabel }}</p>
+    </template>
+
+    <template v-else>
+      <ul class="flex flex-col gap-2">
+        <li
+          v-for="p in sortedInventoryItems"
+          :key="p.id"
+          class="flex flex-col items-start justify-between gap-2 rounded border border-default px-3 py-2 sm:flex-row sm:items-center"
+        >
+          <div class="flex-1 cursor-pointer" @click="openEdit(p)">
+            <span class="font-medium">{{ p.item!.name }}</span>
+            <UBadge
+              v-for="ic in p.item!.item_categories"
+              :key="ic.categories!.id"
+              size="sm"
+              :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+              class="ml-2"
+            >
+              {{ ic.categories!.name }}
+            </UBadge>
+            <UBadge
+              v-if="p.stock_status"
+              size="sm"
+              :color="p.stock_status === 'out' ? 'error' : p.stock_status === 'low' ? 'warning' : 'success'"
+              class="ml-2"
+            >
+              {{ DB_TO_STOCK_STATUS[p.stock_status] }}
+            </UBadge>
+            <span v-if="p.quantity != null" class="text-muted ml-2 text-sm">
+              {{ p.quantity }}<span v-if="p.unit">{{ ' ' + unitLabel(p.unit, p.quantity) }}</span>
+            </span>
+            <UBadge
+              v-for="il in p.inventory_item_locations"
+              :key="il.storage_location!.id"
+              size="sm"
+              variant="outline"
+              class="ml-2"
+            >
+              {{ il.storage_location!.name }}
+            </UBadge>
+            <UBadge
+              v-for="ir in p.inventory_item_rooms"
+              :key="ir.room!.id"
+              size="sm"
+              variant="outline"
+              class="ml-2"
+            >
+              {{ ir.room!.name }}
+            </UBadge>
+            <p v-if="p.notes" class="text-muted text-xs">{{ p.notes }}</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1" @click.stop>
+            <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
+            <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
+            <UInputMenu
+              :model-value="addListSelection[p.id] ?? null"
+              :items="activeLists ?? []"
+              label-key="name"
+              placeholder="Add to list..."
+              class="w-36"
+              @update:model-value="(val) => onPickListForItem(p, val)"
+            />
+            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="openEdit(p)" />
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-trash-2"
+              @click="deleteInventoryItem(p.id)"
+            />
+          </div>
+        </li>
+      </ul>
+      <p v-if="sortedInventoryItems.length === 0" class="text-muted text-sm">{{ emptyLabel }}</p>
+    </template>
 
     <USlideover v-model:open="slideoverOpen" :title="editingId ? 'Edit entry' : addLabel">
       <template #body>

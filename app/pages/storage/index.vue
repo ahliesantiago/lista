@@ -132,7 +132,8 @@ async function saveEdit(id: string) {
 
 <template>
   <div class="mx-auto max-w-lg">
-    <div class="mb-4 flex justify-end">
+    <div class="mb-4 flex items-center justify-between">
+      <h1 class="text-lg font-semibold">Locations</h1>
       <UButton to="/rooms" variant="outline" size="sm">Manage rooms</UButton>
     </div>
 

@@ -42,6 +42,52 @@ const { data: roomOptions } = await useAsyncData('room-options', async () => {
   return data as Option[]
 })
 
+type EquipmentRow = NonNullable<typeof equipment.value>[number]
+
+const filterLocations = ref<Option[]>([])
+const filterRooms = ref<Option[]>([])
+
+const filteredEquipment = computed(() => {
+  let list = equipment.value ?? []
+  if (filterLocations.value.length > 0) {
+    const ids = new Set(filterLocations.value.map((l) => l.id))
+    list = list.filter((e) => e.equipment_locations.some((el) => ids.has(el.storage_location!.id)))
+  }
+  if (filterRooms.value.length > 0) {
+    const ids = new Set(filterRooms.value.map((r) => r.id))
+    list = list.filter((e) => e.equipment_rooms.some((er) => ids.has(er.room!.id)))
+  }
+  return list
+})
+
+const {
+  sortBy,
+  groupBy,
+  sortOptions,
+  groupOptions,
+  sortedItems: visibleEquipment,
+  groupedItems: groupedEquipment,
+} = useListControls<EquipmentRow>(
+  filteredEquipment,
+  {
+    'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.name.localeCompare(b.name) },
+    'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.name.localeCompare(a.name) },
+  },
+  {
+    location: {
+      label: 'Location',
+      getKeys: (e) =>
+        e.equipment_locations.length > 0
+          ? e.equipment_locations.map((el) => el.storage_location!.name)
+          : ['No location set'],
+    },
+    room: {
+      label: 'Room',
+      getKeys: (e) => (e.equipment_rooms.length > 0 ? e.equipment_rooms.map((er) => er.room!.name) : ['Unassigned']),
+    },
+  },
+)
+
 const newName = ref('')
 const newNotes = ref('')
 const newLocations = ref<Option[]>([])
@@ -180,8 +226,114 @@ async function saveEdit(id: string) {
 
     <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>
 
-    <ul class="flex flex-col gap-2">
-      <li v-for="item in equipment" :key="item.id" class="rounded border border-default px-3 py-2">
+    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div>
+        <label class="text-muted mb-1 block text-xs">Sort by</label>
+        <USelect v-model="sortBy" :items="sortOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Group by</label>
+        <USelect v-model="groupBy" :items="groupOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by location</label>
+        <UInputMenu
+          v-model="filterLocations"
+          :items="locationOptionsForPicker"
+          multiple
+          label-key="label"
+          placeholder="Any location"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Filter by room</label>
+        <UInputMenu
+          v-model="filterRooms"
+          :items="roomOptions ?? []"
+          multiple
+          label-key="name"
+          placeholder="Any room"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <template v-if="groupedEquipment">
+      <div v-for="[groupName, groupEquipment] in groupedEquipment" :key="groupName" class="mb-4">
+        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
+        <ul class="flex flex-col gap-2">
+          <li v-for="item in groupEquipment" :key="item.id" class="rounded border border-default px-3 py-2">
+            <div v-if="editingId !== item.id" class="flex items-center justify-between">
+              <span>
+                {{ item.name }}
+                <span v-if="item.notes" class="text-muted text-sm">({{ item.notes }})</span>
+                <UBadge
+                  v-for="il in item.equipment_locations"
+                  :key="il.storage_location!.id"
+                  size="sm"
+                  variant="outline"
+                  class="ml-2"
+                >
+                  {{ il.storage_location!.name }}
+                </UBadge>
+                <UBadge
+                  v-for="ir in item.equipment_rooms"
+                  :key="ir.room!.id"
+                  size="sm"
+                  variant="outline"
+                  class="ml-2"
+                >
+                  {{ ir.room!.name }}
+                </UBadge>
+              </span>
+              <div class="flex gap-1">
+                <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(item)" />
+                <UButton
+                  size="sm"
+                  variant="ghost"
+                  color="error"
+                  icon="i-lucide-trash-2"
+                  @click="deleteEquipment(item.id)"
+                />
+              </div>
+            </div>
+            <div v-else class="flex flex-col gap-2">
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <UInput v-model="editName" placeholder="Equipment" class="flex-1" />
+                <UInput v-model="editNotes" placeholder="Notes (optional)" class="flex-1" />
+              </div>
+              <div class="flex flex-col gap-2">
+                <UInputMenu
+                  v-model="editLocations"
+                  :items="locationOptionsForPicker"
+                  multiple
+                  label-key="label"
+                  placeholder="Locations (up to 2)"
+                  class="w-full"
+                />
+                <UInputMenu
+                  v-model="editRooms"
+                  :items="roomOptions ?? []"
+                  multiple
+                  label-key="name"
+                  placeholder="Rooms (up to 2)"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex gap-1">
+                <UButton size="sm" @click="saveEdit(item.id)">Save</UButton>
+                <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <p v-if="groupedEquipment.length === 0" class="text-muted text-sm">No equipment matches.</p>
+    </template>
+
+    <ul v-else class="flex flex-col gap-2">
+      <li v-for="item in visibleEquipment" :key="item.id" class="rounded border border-default px-3 py-2">
         <div v-if="editingId !== item.id" class="flex items-center justify-between">
           <span>
             {{ item.name }}
@@ -245,7 +397,7 @@ async function saveEdit(id: string) {
           </div>
         </div>
       </li>
-      <li v-if="equipment && equipment.length === 0" class="text-muted text-sm">No equipment yet.</li>
+      <li v-if="visibleEquipment.length === 0" class="text-muted text-sm">No equipment matches.</li>
     </ul>
   </div>
 </template>

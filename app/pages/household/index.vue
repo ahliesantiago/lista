@@ -25,6 +25,11 @@ const sections = [
     description: 'Brand, room, quantity, maintenance/replacement flags.',
     to: '/furniture'
   },
+  {
+    label: 'Storage',
+    description: 'Rooms and the storage locations within them.',
+    to: '/rooms',
+  },
 ]
 </script>
 

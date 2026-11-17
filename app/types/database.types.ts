@@ -1,5 +1,4 @@
-Forgot your password? Reset it from the Dashboard: https://supabase.com/dashboard/project/yylifzyydtfuijrshhhs/settings/database
-Enter your database password: 
+
 export type Json =
   | string
   | number
@@ -41,6 +40,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      appliance_locations: {
+        Row: {
+          appliance_id: string
+          storage_location_id: string
+        }
+        Insert: {
+          appliance_id: string
+          storage_location_id: string
+        }
+        Update: {
+          appliance_id?: string
+          storage_location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appliance_locations_appliance_id_fkey"
+            columns: ["appliance_id"]
+            isOneToOne: false
+            referencedRelation: "appliances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appliance_locations_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appliance_rooms: {
+        Row: {
+          appliance_id: string
+          room_id: string
+        }
+        Insert: {
+          appliance_id: string
+          room_id: string
+        }
+        Update: {
+          appliance_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appliance_rooms_appliance_id_fkey"
+            columns: ["appliance_id"]
+            isOneToOne: false
+            referencedRelation: "appliances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appliance_rooms_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appliances: {
         Row: {
           brand: string | null
@@ -246,7 +305,6 @@ export type Database = {
           needs_replacement: boolean
           notes: string | null
           quantity: number
-          room: string | null
           space_id: string
         }
         Insert: {
@@ -260,7 +318,6 @@ export type Database = {
           needs_replacement?: boolean
           notes?: string | null
           quantity?: number
-          room?: string | null
           space_id: string
         }
         Update: {
@@ -274,7 +331,6 @@ export type Database = {
           needs_replacement?: boolean
           notes?: string | null
           quantity?: number
-          room?: string | null
           space_id?: string
         }
         Relationships: [
@@ -283,6 +339,66 @@ export type Database = {
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      furniture_locations: {
+        Row: {
+          furniture_id: string
+          storage_location_id: string
+        }
+        Insert: {
+          furniture_id: string
+          storage_location_id: string
+        }
+        Update: {
+          furniture_id?: string
+          storage_location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "furniture_locations_furniture_id_fkey"
+            columns: ["furniture_id"]
+            isOneToOne: false
+            referencedRelation: "furniture"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "furniture_locations_storage_location_id_fkey"
+            columns: ["storage_location_id"]
+            isOneToOne: false
+            referencedRelation: "storage_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      furniture_rooms: {
+        Row: {
+          furniture_id: string
+          room_id: string
+        }
+        Insert: {
+          furniture_id: string
+          room_id: string
+        }
+        Update: {
+          furniture_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "furniture_rooms_furniture_id_fkey"
+            columns: ["furniture_id"]
+            isOneToOne: false
+            referencedRelation: "furniture"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "furniture_rooms_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -1563,5 +1679,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-A new version of Supabase CLI is available: v3.1.0 (currently installed v2.22.6)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

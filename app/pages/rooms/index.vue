@@ -56,6 +56,11 @@ async function saveEdit(id: string) {
 
 <template>
   <div class="mx-auto max-w-lg">
+    <div class="mb-4 flex items-center justify-between">
+      <h1 class="text-lg font-semibold">Rooms</h1>
+      <UButton to="/storage" variant="outline" size="sm">Manage locations</UButton>
+    </div>
+
     <form class="mb-6 flex gap-2" @submit.prevent="addRoom">
       <UInput v-model="newName" placeholder="Room (e.g. Kitchen)" required class="flex-1" />
       <UButton type="submit" :loading="saving">Add</UButton>

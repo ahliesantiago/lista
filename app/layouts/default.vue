@@ -47,6 +47,7 @@ const navLinks = [
       { to: '/equipment', label: 'Equipment' },
       { to: '/appliances', label: 'Appliances' },
       { to: '/furniture', label: 'Furniture' },
+      { to: '/rooms', label: 'Storage' },
     ],
   },
 ]
@@ -79,7 +80,7 @@ const pageTitles: Record<string, string> = {
   '/equipment': 'Equipment',
   '/appliances': 'Appliances',
   '/furniture': 'Furniture',
-  '/rooms': 'Rooms',
+  '/rooms': 'Storage',
   '/storage': 'Storage',
   '/recipe-categories': 'Recipe Categories',
   '/trash': 'Trash',
