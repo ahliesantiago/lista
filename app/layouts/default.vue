@@ -37,13 +37,25 @@ const navLinks = [
   { to: '/categories', label: 'Categories', icon: 'i-lucide-folder-tree' },
   { to: '/tags', label: 'Tags', icon: 'i-lucide-tags' },
   { to: '/units', label: 'Units', icon: 'i-lucide-ruler' },
-  { to: '/household', label: 'Household', icon: 'i-lucide-house-plus' },
+  {
+    to: '/household',
+    label: 'Household',
+    icon: 'i-lucide-house-plus',
+    children: [
+      { to: '/pantry', label: 'Pantry' },
+      { to: '/home-inventory', label: 'Home Inventory' },
+      { to: '/equipment', label: 'Equipment' },
+      { to: '/appliances', label: 'Appliances' },
+      { to: '/furniture', label: 'Furniture' },
+    ],
+  },
 ]
 
 const primaryMobileLinks = navLinks.filter((link) => ['/lists', '/recipes', '/items', '/household'].includes(link.to))
 const moreLinks = navLinks.filter((link) => !primaryMobileLinks.includes(link))
 
 const sidebarCollapsed = ref(true)
+const householdExpanded = ref(false)
 const mobileMoreOpen = ref(false)
 
 const route = useRoute()
@@ -113,17 +125,38 @@ useHead({
       </div>
 
       <nav class="flex flex-1 flex-col gap-1">
-        <NuxtLink
-          v-for="link in navLinks"
-          :key="link.to"
-          :to="link.to"
-          :title="sidebarCollapsed ? link.label : undefined"
-          class="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-elevated"
-          active-class="bg-elevated text-primary"
-        >
-          <UIcon :name="link.icon" class="size-5 shrink-0" />
-          <span v-if="!sidebarCollapsed">{{ link.label }}</span>
-        </NuxtLink>
+        <template v-for="link in navLinks" :key="link.to">
+          <div class="flex items-center">
+            <NuxtLink
+              :to="link.to"
+              :title="sidebarCollapsed ? link.label : undefined"
+              class="flex flex-1 items-center gap-2 rounded px-2 py-2 text-sm hover:bg-elevated"
+              active-class="bg-elevated text-primary"
+            >
+              <UIcon :name="link.icon" class="size-5 shrink-0" />
+              <span v-if="!sidebarCollapsed">{{ link.label }}</span>
+            </NuxtLink>
+            <UButton
+              v-if="link.children && !sidebarCollapsed"
+              variant="ghost"
+              size="sm"
+              :icon="householdExpanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              :title="householdExpanded ? 'Collapse' : 'Expand'"
+              @click="householdExpanded = !householdExpanded"
+            />
+          </div>
+          <div v-if="link.children && !sidebarCollapsed && householdExpanded" class="ml-6 flex flex-col gap-1">
+            <NuxtLink
+              v-for="child in link.children"
+              :key="child.to"
+              :to="child.to"
+              class="rounded px-2 py-1.5 text-sm text-muted hover:bg-elevated"
+              active-class="bg-elevated text-primary"
+            >
+              {{ child.label }}
+            </NuxtLink>
+          </div>
+        </template>
       </nav>
     </aside>
 
