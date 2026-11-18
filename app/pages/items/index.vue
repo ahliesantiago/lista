@@ -66,11 +66,18 @@ tagOptions.value = tagOptionsInitial.value ?? []
 
 const filterCategories = ref<CategoryOption[]>([])
 const filterTags = ref<Option[]>([])
+const searchTerm = ref('')
 
 type ItemRow = NonNullable<typeof items.value>[number]
 
 const filteredItems = computed(() => {
   let list = items.value ?? []
+  if (searchTerm.value.trim()) {
+    const term = searchTerm.value.trim().toLowerCase()
+    list = list.filter(
+      (item) => item.name.toLowerCase().includes(term) || item.plural_name?.toLowerCase().includes(term),
+    )
+  }
   if (filterCategories.value.length > 0) {
     const ids = new Set(filterCategories.value.map((c) => c.id))
     list = list.filter((item) => item.item_categories.some((ic) => ids.has(ic.categories!.id)))
@@ -105,6 +112,58 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } 
     },
   },
 )
+groupBy.value = 'category'
+
+// group buckets are keyed by name (not id) - categories/tags are unique
+// per space by name, so this is an unambiguous name->id lookup for
+// quick-add to know which category/tag a given group heading maps to
+const categoryIdByName = computed(() => new Map((categoryOptions.value ?? []).map((c) => [c.name, c.id])))
+const tagIdByName = computed(() => new Map(tagOptions.value.map((t) => [t.name, t.id])))
+
+// groups default expanded (unlike Trash's collapse-by-default) - the
+// Masterlist's whole point is browsing/finding items, so hiding content
+// by default would work against that
+const collapsedGroups = ref<Record<string, boolean>>({})
+function isGroupExpanded(groupName: string) {
+  return !collapsedGroups.value[groupName]
+}
+function toggleGroup(groupName: string) {
+  collapsedGroups.value[groupName] = !collapsedGroups.value[groupName]
+}
+function expandAllGroups() {
+  collapsedGroups.value = {}
+}
+function collapseAllGroups() {
+  const all: Record<string, boolean> = {}
+  for (const [groupName] of groupedItems.value ?? []) all[groupName] = true
+  collapsedGroups.value = all
+}
+
+const quickAddOpenFor = ref<string | null>(null)
+const quickAddName = ref('')
+function openQuickAdd(groupName: string) {
+  quickAddOpenFor.value = groupName
+  quickAddName.value = ''
+}
+async function submitQuickAdd(groupName: string) {
+  if (!space.value || !quickAddName.value.trim()) return
+  const { data, error: insertError } = await supabase
+    .from('items')
+    .insert({ space_id: space.value.id, name: capitalizeFirst(quickAddName.value.trim()) })
+    .select('id')
+    .single()
+  if (insertError || !data) return
+  if (groupBy.value === 'category') {
+    const categoryId = categoryIdByName.value.get(groupName)
+    if (categoryId) await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId })
+  } else if (groupBy.value === 'tag') {
+    const tagId = tagIdByName.value.get(groupName)
+    if (tagId) await supabase.from('item_tags').insert({ item_id: data.id, tag_id: tagId })
+  }
+  quickAddOpenFor.value = null
+  quickAddName.value = ''
+  await refresh()
+}
 
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
@@ -289,6 +348,13 @@ async function deleteItem(id: string) {
 
     <p v-if="itemsError" class="mb-4 text-sm text-red-500">{{ itemsError.message }}</p>
 
+    <UInput
+      v-model="searchTerm"
+      icon="i-lucide-search"
+      placeholder="Search items"
+      class="mb-4 w-full"
+    />
+
     <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
       <div>
         <label class="text-muted mb-1 block text-xs">Sort by</label>
@@ -323,9 +389,42 @@ async function deleteItem(id: string) {
     </div>
 
     <template v-if="groupedItems">
+      <div v-if="groupedItems.length > 0" class="mb-4 flex gap-2">
+        <UButton size="sm" variant="ghost" @click="expandAllGroups">Expand all</UButton>
+        <UButton size="sm" variant="ghost" @click="collapseAllGroups">Collapse all</UButton>
+      </div>
       <div v-for="[groupName, groupItems] in groupedItems" :key="groupName" class="mb-4">
-        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
-        <ul class="flex flex-col gap-2">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            class="flex flex-1 items-center gap-1 text-left"
+            @click="toggleGroup(groupName)"
+          >
+            <UIcon
+              :name="isGroupExpanded(groupName) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+              class="size-4 text-muted"
+            />
+            <h2 class="text-sm font-semibold text-muted">{{ groupName }}</h2>
+          </button>
+          <UButton
+            v-if="groupBy === 'category' || groupBy === 'tag'"
+            size="sm"
+            variant="ghost"
+            icon="i-lucide-plus"
+            :title="`Quick add to ${groupName}`"
+            @click="openQuickAdd(groupName)"
+          />
+        </div>
+        <form
+          v-if="quickAddOpenFor === groupName"
+          class="mb-2 flex gap-2"
+          @submit.prevent="submitQuickAdd(groupName)"
+        >
+          <UInput v-model="quickAddName" autofocus placeholder="Item name" class="flex-1" />
+          <UButton type="submit" size="sm">Add</UButton>
+          <UButton size="sm" variant="ghost" @click="quickAddOpenFor = null">Cancel</UButton>
+        </form>
+        <ul v-if="isGroupExpanded(groupName)" class="flex flex-col gap-2">
           <li
             v-for="item in groupItems"
             :key="item.id"
