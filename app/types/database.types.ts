@@ -864,6 +864,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          move_done_to_bottom: boolean
           name: string
           notes: string | null
           sort_order: number
@@ -877,6 +878,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          move_done_to_bottom?: boolean
           name: string
           notes?: string | null
           sort_order?: number
@@ -890,6 +892,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          move_done_to_bottom?: boolean
           name?: string
           notes?: string | null
           sort_order?: number

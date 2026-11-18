@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import draggable from 'vuedraggable'
+import type { TreeGroupBy, TreeSortBy } from '~/composables/useGroupedItemTree'
 
 type Option = { id: string; name: string; plural_name?: string | null }
+type ItemOption = Option & {
+  item_categories: { categories: { id: string; name: string } | null }[]
+  item_tags: { tags: { id: string; name: string } | null }[]
+}
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
@@ -22,7 +27,7 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
   const { data, error } = await supabase
     .from('lists')
     .select(`
-      id, name, description, notes, status,
+      id, name, description, notes, status, move_done_to_bottom,
       list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
@@ -47,7 +52,8 @@ const { data: listItems } = await useAsyncData(`list-items-${listId}`, async () 
     .select(`
       id, name, amount, size, notes, is_done, item_id, parent_id, sort_order,
       unit:units!list_items_unit_id_fkey(id, name_singular, name_plural),
-      list_item_sources(quantity, unit:units(name_singular, name_plural), recipe:recipes(id, name))
+      list_item_sources(quantity, unit:units(name_singular, name_plural), recipe:recipes(id, name)),
+      item:items(item_categories(categories(id, name)), item_tags(tags(id, name)))
     `)
     .eq('list_id', listId)
     .is('deleted_at', null)
@@ -134,16 +140,38 @@ function outdentItem(id: string, parentId: string) {
   persistItemOrder()
 }
 
+// --- display: sort / group / done-to-bottom ---
+
+const sortByOptions = [
+  { value: 'custom', label: 'Custom order' },
+  { value: 'name-asc', label: 'Name (A–Z)' },
+]
+const groupByOptions = [
+  { value: 'none', label: 'None' },
+  { value: 'category', label: 'Category' },
+  { value: 'tag', label: 'Tag' },
+]
+const sortBy = ref<TreeSortBy>('custom')
+const groupBy = ref<TreeGroupBy>('none')
+const moveDoneToBottom = ref(list.value?.move_done_to_bottom ?? false)
+watch(moveDoneToBottom, (v) => saveListField({ move_done_to_bottom: v }))
+
+const { groupedTree, flatSortedTree } = useGroupedItemTree(itemTree, sortBy, groupBy, moveDoneToBottom)
+
+const isLiveCustomOrder = computed(
+  () => sortBy.value === 'custom' && groupBy.value === 'none' && !moveDoneToBottom.value,
+)
+
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
   const { data, error } = await supabase
     .from('items')
-    .select('id, name, plural_name')
+    .select('id, name, plural_name, item_categories(categories(id, name)), item_tags(tags(id, name))')
     .is('deleted_at', null)
     .order('name')
   if (error) throw error
   return data
 })
-const itemOptions = ref<Option[]>(itemOptionsInitial.value ?? [])
+const itemOptions = ref<ItemOption[]>(itemOptionsInitial.value ?? [])
 
 const { data: unitOptions } = await useAsyncData('unit-options', async () => {
   const { data, error } = await supabase
@@ -173,24 +201,6 @@ const { data: tagOptionsInitial } = await useAsyncData('tag-options', async () =
   return data
 })
 tagOptions.value = tagOptionsInitial.value ?? []
-
-function unitLabel(unit: { name_singular: string; name_plural: string } | null, amount: number | null) {
-  if (!unit) return ''
-  return amount != null && amount !== 1 ? unit.name_plural : unit.name_singular
-}
-
-function sourcesLabel(
-  sources: { quantity: number | null; unit: { name_singular: string; name_plural: string } | null; recipe: { name: string } | null }[],
-) {
-  const withRecipe = sources.filter((s) => s.recipe)
-  if (withRecipe.length === 0) return ''
-  return withRecipe
-    .map((s) => {
-      const qty = s.quantity != null ? `${s.quantity} ${unitLabel(s.unit, s.quantity)}`.trim() : ''
-      return `${qty ? qty + ' ' : ''}from ${s.recipe!.name}`
-    })
-    .join(', ')
-}
 
 // --- editable header: name/description/notes/category/tags ---
 
@@ -304,16 +314,6 @@ const unitOptionsForAmount = computed(
 // touches the link); without this, re-opening it for edit would have no
 // live option to resolve a label from and fall back to showing the raw id.
 const extraEditUnitOption = ref<{ id: string; name_singular: string; name_plural: string } | null>(null)
-const editUnitOptionsForAmount = computed(() => {
-  const label = (u: { name_singular: string; name_plural: string }) =>
-    editAmount.value != null && editAmount.value !== 1 ? u.name_plural : u.name_singular
-  const base = unitOptions.value?.map((u) => ({ ...u, label: label(u) })) ?? []
-  const extra = extraEditUnitOption.value
-  if (extra && !base.some((u) => u.id === extra.id)) {
-    return [...base, { ...extra, abbrev_singular: null, abbrev_plural: null, label: label(extra) }]
-  }
-  return base
-})
 
 const { resolveItem } = useResolveMasterItem()
 
@@ -364,6 +364,10 @@ async function addItem() {
   }
 
   const unitMatch = unitIdValue ? unitOptions.value?.find((u) => u.id === unitIdValue) ?? null : null
+  // a brand-new item (just created via "add to master list") has no
+  // category/tag links yet - the option resolveItem() pushes only has
+  // {id, name}, so these default to [] rather than crashing on undefined
+  const optionMatch = itemId ? itemOptions.value.find((o) => o.id === itemId) : null
   itemTree.value.push({
     id: newRow.id,
     name: resolvedName,
@@ -376,6 +380,7 @@ async function addItem() {
     sort_order: itemTree.value.length,
     unit: unitMatch ? { id: unitMatch.id, name_singular: unitMatch.name_singular, name_plural: unitMatch.name_plural } : null,
     list_item_sources: [],
+    item: { item_categories: optionMatch?.item_categories ?? [], item_tags: optionMatch?.item_tags ?? [] },
     children: [],
   })
 
@@ -429,38 +434,47 @@ async function removeItem(id: string) {
 
 // --- edit item inline ---
 
+type EditDraft = {
+  name: string
+  isListOnly: boolean
+  amount: number | null
+  unitId: string | null
+  size: string
+  notes: string
+}
+
 const editingItemId = ref<string | null>(null)
-const editName = ref('')
-const editIsListOnly = ref(false)
-const editAmount = ref<number | null>(null)
-const editUnitId = ref<string | null>(null)
-const editSize = ref('')
-const editNotes = ref('')
+const editDraft = ref<EditDraft | null>(null)
 
 function startEdit(li: NonNullable<typeof listItems.value>[number]) {
   editingItemId.value = li.id
-  editName.value = li.name
-  editIsListOnly.value = !li.item_id
-  editAmount.value = li.amount
-  editUnitId.value = li.unit?.id ?? null
+  editDraft.value = {
+    name: li.name,
+    isListOnly: !li.item_id,
+    amount: li.amount,
+    unitId: li.unit?.id ?? null,
+    size: li.size ?? '',
+    notes: li.notes ?? '',
+  }
   extraEditUnitOption.value = li.unit ?? null
-  editSize.value = li.size ?? ''
-  editNotes.value = li.notes ?? ''
 }
 
 function cancelEdit() {
   editingItemId.value = null
+  editDraft.value = null
 }
 
 async function saveEdit(id: string) {
-  const sizeValue = editSize.value.trim() || null
-  const notesValue = editNotes.value.trim() || null
+  const draft = editDraft.value
+  if (!draft) return
+  const sizeValue = draft.size.trim() || null
+  const notesValue = draft.notes.trim() || null
   await supabase
     .from('list_items')
     .update({
-      ...(editIsListOnly.value ? { name: editName.value.trim() } : {}),
-      amount: editAmount.value,
-      unit_id: editUnitId.value,
+      ...(draft.isListOnly ? { name: draft.name.trim() } : {}),
+      amount: draft.amount,
+      unit_id: draft.unitId,
       size: sizeValue,
       notes: notesValue,
     })
@@ -468,18 +482,19 @@ async function saveEdit(id: string) {
 
   const found = findItem(id)
   if (found) {
-    if (editIsListOnly.value) found.item.name = editName.value.trim()
-    found.item.amount = editAmount.value
+    if (draft.isListOnly) found.item.name = draft.name.trim()
+    found.item.amount = draft.amount
     found.item.size = sizeValue
     found.item.notes = notesValue
-    const unitMatch = editUnitId.value
-      ? (unitOptions.value?.find((u) => u.id === editUnitId.value) ?? extraEditUnitOption.value)
+    const unitMatch = draft.unitId
+      ? (unitOptions.value?.find((u) => u.id === draft.unitId) ?? extraEditUnitOption.value)
       : null
     found.item.unit = unitMatch
       ? { id: unitMatch.id, name_singular: unitMatch.name_singular, name_plural: unitMatch.name_plural }
       : null
   }
   editingItemId.value = null
+  editDraft.value = null
 }
 
 // --- list-level actions ---
@@ -582,6 +597,23 @@ async function deleteList() {
       <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
     </div>
 
+    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div>
+        <label class="text-muted mb-1 block text-xs">Sort by</label>
+        <USelect v-model="sortBy" :items="sortByOptions" class="w-full" />
+      </div>
+      <div>
+        <label class="text-muted mb-1 block text-xs">Group by</label>
+        <USelect v-model="groupBy" :items="groupByOptions" class="w-full" />
+      </div>
+      <div class="flex items-end">
+        <USwitch v-model="moveDoneToBottom" label="Move crossed-off items to the bottom" />
+      </div>
+    </div>
+    <p v-if="!isLiveCustomOrder && sortBy === 'custom'" class="text-muted mb-4 text-xs">
+      Drag-and-drop reordering and nesting are only available with custom order, no grouping, and crossed-off items kept in place.
+    </p>
+
     <form
       v-if="viewMode === 'edit'"
       class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
@@ -610,167 +642,150 @@ async function deleteList() {
       <UButton type="submit" :loading="adding">Add item</UButton>
     </form>
 
-    <draggable
-      v-model="itemTree"
-      item-key="id"
-      tag="ul"
-      class="flex flex-col gap-2"
-      handle=".drag-handle"
-      :disabled="viewMode !== 'edit'"
-      @change="onItemTreeChange"
-    >
-      <template #item="{ element: li }">
-        <li>
-          <div class="rounded border border-default px-3 py-2">
-            <div v-if="editingItemId !== li.id" class="flex items-center justify-between">
-              <div class="flex flex-1 items-center gap-1">
-                <UIcon
-                  v-if="viewMode === 'edit'"
-                  name="i-lucide-grip-vertical"
-                  class="drag-handle text-muted shrink-0 cursor-grab"
+    <template v-if="isLiveCustomOrder">
+      <draggable
+        v-model="itemTree"
+        item-key="id"
+        tag="ul"
+        class="flex flex-col gap-2"
+        handle=".drag-handle"
+        :disabled="viewMode !== 'edit'"
+        @change="onItemTreeChange"
+      >
+        <template #item="{ element: li }">
+          <li>
+            <ListItemRow
+              :item="li"
+              :nest-button="viewMode === 'edit' && itemTree.indexOf(li) > 0 && li.children.length === 0 ? 'indent' : null"
+              :reorderable="viewMode === 'edit'"
+              :editable="viewMode === 'edit'"
+              :editing-id="editingItemId"
+              v-model:draft="editDraft"
+              :unit-options="unitOptions ?? []"
+              :extra-edit-unit-option="extraEditUnitOption"
+              @toggle-done="toggleDone(li.id, li.is_done)"
+              @start-edit="startEdit(li)"
+              @cancel-edit="cancelEdit"
+              @save-edit="saveEdit(li.id)"
+              @remove="removeItem(li.id)"
+              @nest="indentItem(li.id)"
+            />
+            <draggable
+              v-if="li.children.length > 0"
+              v-model="li.children"
+              item-key="id"
+              tag="ul"
+              class="ml-6 mt-2 flex flex-col gap-2"
+              handle=".drag-handle"
+              :disabled="viewMode !== 'edit'"
+              @change="onItemTreeChange"
+            >
+              <template #item="{ element: child }">
+                <li>
+                  <ListItemRow
+                    :item="child"
+                    :nest-button="viewMode === 'edit' ? 'outdent' : null"
+                    :reorderable="viewMode === 'edit'"
+                    :editable="viewMode === 'edit'"
+                    :editing-id="editingItemId"
+                    v-model:draft="editDraft"
+                    :unit-options="unitOptions ?? []"
+                    :extra-edit-unit-option="extraEditUnitOption"
+                    @toggle-done="toggleDone(child.id, child.is_done)"
+                    @start-edit="startEdit(child)"
+                    @cancel-edit="cancelEdit"
+                    @save-edit="saveEdit(child.id)"
+                    @remove="removeItem(child.id)"
+                    @nest="outdentItem(child.id, li.id)"
+                  />
+                </li>
+              </template>
+            </draggable>
+          </li>
+        </template>
+      </draggable>
+    </template>
+    <template v-else-if="groupedTree">
+      <div v-for="[groupName, nodes] in groupedTree" :key="groupName" class="mb-4">
+        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
+        <ul class="flex flex-col gap-2">
+          <li v-for="node in nodes" :key="node.id">
+            <ListItemRow
+              :item="node"
+              :nest-button="null"
+              :reorderable="false"
+              :editable="viewMode === 'edit'"
+              :editing-id="editingItemId"
+              v-model:draft="editDraft"
+              :unit-options="unitOptions ?? []"
+              :extra-edit-unit-option="extraEditUnitOption"
+              @toggle-done="toggleDone(node.id, node.is_done)"
+              @start-edit="startEdit(node)"
+              @cancel-edit="cancelEdit"
+              @save-edit="saveEdit(node.id)"
+              @remove="removeItem(node.id)"
+            />
+            <ul v-if="node.children.length > 0" class="ml-6 mt-2 flex flex-col gap-2">
+              <li v-for="child in node.children" :key="child.id">
+                <ListItemRow
+                  :item="child"
+                  :nest-button="null"
+                  :reorderable="false"
+                  :editable="viewMode === 'edit'"
+                  :editing-id="editingItemId"
+                  v-model:draft="editDraft"
+                  :unit-options="unitOptions ?? []"
+                  :extra-edit-unit-option="extraEditUnitOption"
+                  @toggle-done="toggleDone(child.id, child.is_done)"
+                  @start-edit="startEdit(child)"
+                  @cancel-edit="cancelEdit"
+                  @save-edit="saveEdit(child.id)"
+                  @remove="removeItem(child.id)"
                 />
-                <UButton
-                  v-if="viewMode === 'edit' && itemTree.indexOf(li) > 0 && li.children.length === 0"
-                  size="sm"
-                  variant="ghost"
-                  icon="i-lucide-chevron-right"
-                  title="Nest under previous item"
-                  @click="indentItem(li.id)"
-                />
-                <label class="flex flex-1 items-center gap-3">
-                  <UCheckbox :model-value="li.is_done" @update:model-value="toggleDone(li.id, li.is_done)" />
-                  <span :class="{ 'text-muted line-through': li.is_done }">
-                    {{ li.name }}
-                    <span v-if="li.amount != null" class="text-muted text-sm">
-                      {{ li.amount }}<span v-if="li.unit">{{ ' ' + unitLabel(li.unit, li.amount) }}</span>
-                    </span>
-                    <span v-if="li.size" class="text-muted text-sm">({{ li.size }})</span>
-                    <span v-if="li.notes" class="text-muted block text-xs">{{ li.notes }}</span>
-                    <span v-if="sourcesLabel(li.list_item_sources)" class="text-muted block text-xs">
-                      {{ sourcesLabel(li.list_item_sources) }}
-                    </span>
-                  </span>
-                </label>
-              </div>
-              <div v-if="viewMode === 'edit'" class="flex items-center gap-1">
-                <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(li)" />
-                <UButton
-                  size="sm"
-                  variant="ghost"
-                  color="error"
-                  icon="i-lucide-trash-2"
-                  @click="removeItem(li.id)"
-                />
-              </div>
-            </div>
-
-            <div v-else class="flex flex-col gap-2">
-              <UInput v-if="editIsListOnly" v-model="editName" placeholder="Name" />
-              <span v-else class="font-medium">{{ li.name }}</span>
-              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
-                <USelectMenu
-                  v-model="editUnitId"
-                  :items="editUnitOptionsForAmount"
-                  value-key="id"
-                  label-key="label"
-                  :filter-fields="UNIT_FILTER_FIELDS"
-                  placeholder="Unit"
-                />
-                <UInput v-model="editSize" placeholder="Size" />
-              </div>
-              <UInput v-model="editNotes" placeholder="Notes (optional)" />
-              <div class="flex gap-2">
-                <UButton size="sm" @click="saveEdit(li.id)">Save</UButton>
-                <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
-              </div>
-            </div>
-          </div>
-
-          <draggable
-            v-if="li.children.length > 0"
-            v-model="li.children"
-            item-key="id"
-            tag="ul"
-            class="ml-6 mt-2 flex flex-col gap-2"
-            handle=".drag-handle"
-            :disabled="viewMode !== 'edit'"
-            @change="onItemTreeChange"
-          >
-            <template #item="{ element: child }">
-              <li class="rounded border border-default px-3 py-2">
-                <div v-if="editingItemId !== child.id" class="flex items-center justify-between">
-                  <div class="flex flex-1 items-center gap-1">
-                    <UIcon
-                      v-if="viewMode === 'edit'"
-                      name="i-lucide-grip-vertical"
-                      class="drag-handle text-muted shrink-0 cursor-grab"
-                    />
-                    <UButton
-                      v-if="viewMode === 'edit'"
-                      size="sm"
-                      variant="ghost"
-                      icon="i-lucide-chevron-left"
-                      title="Move to top level"
-                      @click="outdentItem(child.id, li.id)"
-                    />
-                    <label class="flex flex-1 items-center gap-3">
-                      <UCheckbox
-                        :model-value="child.is_done"
-                        @update:model-value="toggleDone(child.id, child.is_done)"
-                      />
-                      <span :class="{ 'text-muted line-through': child.is_done }">
-                        {{ child.name }}
-                        <span v-if="child.amount != null" class="text-muted text-sm">
-                          {{ child.amount }}<span v-if="child.unit">{{ ' ' + unitLabel(child.unit, child.amount) }}</span>
-                        </span>
-                        <span v-if="child.size" class="text-muted text-sm">({{ child.size }})</span>
-                        <span v-if="child.notes" class="text-muted block text-xs">{{ child.notes }}</span>
-                        <span v-if="sourcesLabel(child.list_item_sources)" class="text-muted block text-xs">
-                          {{ sourcesLabel(child.list_item_sources) }}
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                  <div v-if="viewMode === 'edit'" class="flex items-center gap-1">
-                    <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(child)" />
-                    <UButton
-                      size="sm"
-                      variant="ghost"
-                      color="error"
-                      icon="i-lucide-trash-2"
-                      @click="removeItem(child.id)"
-                    />
-                  </div>
-                </div>
-
-                <div v-else class="flex flex-col gap-2">
-                  <UInput v-if="editIsListOnly" v-model="editName" placeholder="Name" />
-                  <span v-else class="font-medium">{{ child.name }}</span>
-                  <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <UInputNumber v-model="editAmount" placeholder="Qty" :min="0" />
-                    <USelectMenu
-                      v-model="editUnitId"
-                      :items="editUnitOptionsForAmount"
-                      value-key="id"
-                      label-key="label"
-                      :filter-fields="UNIT_FILTER_FIELDS"
-                      placeholder="Unit"
-                    />
-                    <UInput v-model="editSize" placeholder="Size" />
-                  </div>
-                  <UInput v-model="editNotes" placeholder="Notes (optional)" />
-                  <div class="flex gap-2">
-                    <UButton size="sm" @click="saveEdit(child.id)">Save</UButton>
-                    <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
-                  </div>
-                </div>
               </li>
-            </template>
-          </draggable>
-        </li>
-      </template>
-    </draggable>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </template>
+    <ul v-else class="flex flex-col gap-2">
+      <li v-for="node in flatSortedTree" :key="node.id">
+        <ListItemRow
+          :item="node"
+          :nest-button="null"
+          :reorderable="false"
+          :editable="viewMode === 'edit'"
+          :editing-id="editingItemId"
+          v-model:draft="editDraft"
+          :unit-options="unitOptions ?? []"
+          :extra-edit-unit-option="extraEditUnitOption"
+          @toggle-done="toggleDone(node.id, node.is_done)"
+          @start-edit="startEdit(node)"
+          @cancel-edit="cancelEdit"
+          @save-edit="saveEdit(node.id)"
+          @remove="removeItem(node.id)"
+        />
+        <ul v-if="node.children.length > 0" class="ml-6 mt-2 flex flex-col gap-2">
+          <li v-for="child in node.children" :key="child.id">
+            <ListItemRow
+              :item="child"
+              :nest-button="null"
+              :reorderable="false"
+              :editable="viewMode === 'edit'"
+              :editing-id="editingItemId"
+              v-model:draft="editDraft"
+              :unit-options="unitOptions ?? []"
+              :extra-edit-unit-option="extraEditUnitOption"
+              @toggle-done="toggleDone(child.id, child.is_done)"
+              @start-edit="startEdit(child)"
+              @cancel-edit="cancelEdit"
+              @save-edit="saveEdit(child.id)"
+              @remove="removeItem(child.id)"
+            />
+          </li>
+        </ul>
+      </li>
+    </ul>
     <p v-if="itemTree.length === 0" class="text-muted text-sm">No items yet.</p>
   </div>
 </template>
