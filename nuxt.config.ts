@@ -4,6 +4,14 @@ export default defineNuxtConfig({
   css: ['@/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icon-192.png' },
+        { rel: 'apple-touch-icon', sizes: '192x192', href: '/icon-192.png' },
+      ],
+    },
+  },
   nitro: {
     preset: 'cloudflare-pages',
   },
