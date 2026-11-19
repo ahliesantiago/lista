@@ -3,8 +3,8 @@ export type TreeGroupBy = 'none' | 'category' | 'tag'
 
 type Classified = {
   item: {
-    item_categories: { categories: { name: string } | null }[]
-    item_tags: { tags: { name: string } | null }[]
+    item_categories: { categories: { name: string } | null; is_primary: boolean }[]
+    item_tags: { tags: { name: string } | null; is_primary: boolean }[]
   } | null
 }
 
@@ -12,6 +12,8 @@ export function useGroupedItemTree<
   TChild extends { id: string; name: string; is_done: boolean },
   TNode extends TChild & Classified & { children: TChild[] },
 >(itemTree: Ref<TNode[]>, sortBy: Ref<TreeSortBy>, groupBy: Ref<TreeGroupBy>, moveDoneToBottom: Ref<boolean>) {
+  const { primaryCategoryKeys, primaryTagKeys } = useItemCategorization()
+
   function orderNodes<T extends { name: string; is_done: boolean }>(nodes: T[]): T[] {
     const ordered = sortBy.value === 'name-asc' ? [...nodes].sort((a, b) => a.name.localeCompare(b.name)) : nodes
     if (!moveDoneToBottom.value) return ordered
@@ -19,14 +21,8 @@ export function useGroupedItemTree<
   }
 
   function groupKeys(node: TNode): string[] {
-    if (groupBy.value === 'category') {
-      const cats = node.item?.item_categories ?? []
-      return cats.length > 0 ? cats.map((c) => c.categories?.name ?? '?') : ['Uncategorized']
-    }
-    if (groupBy.value === 'tag') {
-      const tags = node.item?.item_tags ?? []
-      return tags.length > 0 ? tags.map((t) => t.tags?.name ?? '?') : ['Untagged']
-    }
+    if (groupBy.value === 'category') return primaryCategoryKeys(node.item?.item_categories ?? [])
+    if (groupBy.value === 'tag') return primaryTagKeys(node.item?.item_tags ?? [])
     return []
   }
 

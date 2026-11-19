@@ -42,7 +42,7 @@ const { data: inventoryItems, refresh } = await useAsyncData(`inventory-items-${
       id, stock_status, quantity, notes,
       inventory_item_locations(storage_location:storage_locations(id, name, room:rooms(id, name))),
       inventory_item_rooms(room:rooms(id, name)),
-      item:items(id, name, item_categories(categories(id, name, parent_id))),
+      item:items(id, name, item_categories(is_primary, categories(id, name, parent_id))),
       unit:units(id, name_singular, name_plural)
     `)
     .eq('kind', props.kind)
@@ -148,6 +148,12 @@ const filteredInventoryItems = computed(() => {
   return list
 })
 
+const { setPrimaryCategory: setPrimaryCategoryLink, primaryCategoryKeys } = useItemCategorization()
+async function setPrimaryCategory(itemId: string, categoryId: string) {
+  await setPrimaryCategoryLink(itemId, categoryId)
+  await refresh()
+}
+
 const {
   sortBy,
   groupBy,
@@ -166,10 +172,7 @@ const {
   {
     category: {
       label: 'Category',
-      getKeys: (p) =>
-        p.item!.item_categories.length > 0
-          ? p.item!.item_categories.map((ic) => ic.categories!.name)
-          : ['Uncategorized'],
+      getKeys: (p) => primaryCategoryKeys(p.item!.item_categories),
     },
     'stock-status': {
       label: 'Stock status',
@@ -427,8 +430,11 @@ async function save() {
                   :key="ic.categories!.id"
                   size="sm"
                   :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-                  class="ml-2"
+                  class="ml-2 cursor-pointer"
+                  :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                  @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
                 >
+                  <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
                   {{ ic.categories!.name }}
                 </UBadge>
                 <UBadge
@@ -505,8 +511,11 @@ async function save() {
                 :key="ic.categories!.id"
                 size="sm"
                 :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-                class="ml-2"
+                class="ml-2 cursor-pointer"
+                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
               >
+                <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
                 {{ ic.categories!.name }}
               </UBadge>
               <UBadge
@@ -580,8 +589,11 @@ async function save() {
               :key="ic.categories!.id"
               size="sm"
               :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-              class="ml-2"
+              class="ml-2 cursor-pointer"
+              :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+              @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
             >
+              <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
               {{ ic.categories!.name }}
             </UBadge>
             <UBadge

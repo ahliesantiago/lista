@@ -20,9 +20,9 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
     .from('items')
     .select(`
       id, name, plural_name, price,
-      item_categories(categories(id, name, parent_id)),
+      item_categories(is_primary, categories(id, name, parent_id)),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
-      item_tags(tags(id, name)),
+      item_tags(is_primary, tags(id, name)),
       item_units(units(id, name_singular, name_plural, abbrev_singular, abbrev_plural))
     `)
     .is('deleted_at', null)
@@ -89,6 +89,23 @@ const filteredItems = computed(() => {
   return list
 })
 
+const {
+  setPrimaryCategory: setPrimaryCategoryLink,
+  setPrimaryTag: setPrimaryTagLink,
+  primaryCategoryKeys,
+  primaryTagKeys,
+  syncPrimaryLinks,
+} = useItemCategorization()
+
+async function setPrimaryCategory(itemId: string, categoryId: string) {
+  await setPrimaryCategoryLink(itemId, categoryId)
+  await refresh()
+}
+async function setPrimaryTag(itemId: string, tagId: string) {
+  await setPrimaryTagLink(itemId, tagId)
+  await refresh()
+}
+
 const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } = useListControls<ItemRow>(
   filteredItems,
   {
@@ -103,12 +120,11 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } 
   {
     category: {
       label: 'Category',
-      getKeys: (item) =>
-        item.item_categories.length > 0 ? item.item_categories.map((ic) => ic.categories!.name) : ['Uncategorized'],
+      getKeys: (item) => primaryCategoryKeys(item.item_categories),
     },
     tag: {
       label: 'Tag',
-      getKeys: (item) => (item.item_tags.length > 0 ? item.item_tags.map((it) => it.tags!.name) : ['Untagged']),
+      getKeys: (item) => primaryTagKeys(item.item_tags),
     },
   },
 )
@@ -155,10 +171,15 @@ async function submitQuickAdd(groupName: string) {
   if (insertError || !data) return
   if (groupBy.value === 'category') {
     const categoryId = categoryIdByName.value.get(groupName)
-    if (categoryId) await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId })
+    // this is the first (and only) category this item has - it must be
+    // primary, or it'd fall straight back into "Uncategorized" despite
+    // being quick-added into a named group
+    if (categoryId) {
+      await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId, is_primary: true })
+    }
   } else if (groupBy.value === 'tag') {
     const tagId = tagIdByName.value.get(groupName)
-    if (tagId) await supabase.from('item_tags').insert({ item_id: data.id, tag_id: tagId })
+    if (tagId) await supabase.from('item_tags').insert({ item_id: data.id, tag_id: tagId, is_primary: true })
   }
   quickAddOpenFor.value = null
   quickAddName.value = ''
@@ -178,12 +199,6 @@ const selectedTags = ref<Option[]>([])
 const error = ref('')
 const saving = ref(false)
 
-// a unit a item stays linked to can be trashed (soft delete never touches
-// the link - only a permanent delete does, via the FK). The picker options
-// are live-only, so without this the picker can't find a label for the
-// current value and falls back to showing the raw id. Categories don't need
-// this: they're a multi-select of whole objects now, so chips render from
-// the bound objects directly rather than being re-resolved from :items.
 const extraDefaultUnitOption = ref<{ id: string; name_singular: string } | null>(null)
 const defaultUnitOptionsForForm = computed(() => {
   const base = unitOptions.value ?? []
@@ -229,6 +244,13 @@ const { onCreateCategoryOption, onCreateSubcategoryOption } = useCategoryCreatio
   selectedSubcategories,
 )
 
+// kept separate from the picker-bound selectedCategories/selectedSubcategories/
+// selectedTags (which only ever hold plain {id,name} option objects) so
+// is_primary doesn't leak into the UInputMenu chip/create-item flow - these
+// exist purely so save() has the "before" state to diff against
+const originalCategoryLinks = ref<{ id: string; is_primary: boolean }[]>([])
+const originalTagLinks = ref<{ id: string; is_primary: boolean }[]>([])
+
 function resetForm() {
   editingId.value = null
   name.value = ''
@@ -240,6 +262,8 @@ function resetForm() {
   selectedUnits.value = []
   selectedTags.value = []
   extraDefaultUnitOption.value = null
+  originalCategoryLinks.value = []
+  originalTagLinks.value = []
   error.value = ''
 }
 
@@ -260,6 +284,8 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   extraDefaultUnitOption.value = item.default_unit ?? null
   selectedUnits.value = item.item_units.map((iu) => iu.units!)
   selectedTags.value = item.item_tags.map((it) => ({ id: it.tags!.id, name: it.tags!.name }))
+  originalCategoryLinks.value = item.item_categories.map((ic) => ({ id: ic.categories!.id, is_primary: ic.is_primary }))
+  originalTagLinks.value = item.item_tags.map((it) => ({ id: it.tags!.id, is_primary: it.is_primary }))
   error.value = ''
   slideoverOpen.value = true
 }
@@ -298,9 +324,7 @@ async function save() {
       error.value = updateError.message
       return
     }
-    await supabase.from('item_tags').delete().eq('item_id', itemId)
     await supabase.from('item_units').delete().eq('item_id', itemId)
-    await supabase.from('item_categories').delete().eq('item_id', itemId)
   } else {
     const { data, error: insertError } = await supabase.from('items').insert(payload).select('id').single()
     if (insertError || !data) {
@@ -311,18 +335,13 @@ async function save() {
     itemId = data.id
   }
 
-  if (selectedTags.value.length > 0) {
-    await supabase.from('item_tags').insert(selectedTags.value.map((t) => ({ item_id: itemId, tag_id: t.id })))
-  }
   if (selectedUnits.value.length > 0) {
     await supabase.from('item_units').insert(selectedUnits.value.map((u) => ({ item_id: itemId, unit_id: u.id })))
   }
-  const allCategories = [...selectedCategories.value, ...selectedSubcategories.value]
-  if (allCategories.length > 0) {
-    await supabase
-      .from('item_categories')
-      .insert(allCategories.map((c) => ({ item_id: itemId, category_id: c.id })))
-  }
+
+  const allCategoryIds = [...selectedCategories.value, ...selectedSubcategories.value].map((c) => c.id)
+  await syncPrimaryLinks('item_categories', 'category_id', itemId, originalCategoryLinks.value, allCategoryIds)
+  await syncPrimaryLinks('item_tags', 'tag_id', itemId, originalTagLinks.value, selectedTags.value.map((t) => t.id))
 
   saving.value = false
   slideoverOpen.value = false
@@ -439,11 +458,23 @@ async function deleteItem(id: string) {
                 :key="ic.categories!.id"
                 size="sm"
                 :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-                class="ml-2"
+                class="ml-2 cursor-pointer"
+                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
               >
+                <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
                 {{ ic.categories!.name }}
               </UBadge>
-              <UBadge v-for="t in item.item_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
+              <UBadge
+                v-for="t in item.item_tags"
+                :key="t.tags!.id"
+                size="sm"
+                variant="outline"
+                class="ml-2 cursor-pointer"
+                :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+                @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+              >
+                <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
                 {{ t.tags!.name }}
               </UBadge>
             </div>
@@ -475,11 +506,23 @@ async function deleteItem(id: string) {
             :key="ic.categories!.id"
             size="sm"
             :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-            class="ml-2"
+            class="ml-2 cursor-pointer"
+            :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+            @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
           >
+            <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
             {{ ic.categories!.name }}
           </UBadge>
-          <UBadge v-for="t in item.item_tags" :key="t.tags!.id" size="sm" variant="outline" class="ml-2">
+          <UBadge
+            v-for="t in item.item_tags"
+            :key="t.tags!.id"
+            size="sm"
+            variant="outline"
+            class="ml-2 cursor-pointer"
+            :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+            @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+          >
+            <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
             {{ t.tags!.name }}
           </UBadge>
         </div>

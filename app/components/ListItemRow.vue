@@ -20,6 +20,10 @@ type ItemRow = {
     unit: { name_singular: string; name_plural: string } | null
     recipe: { name: string } | null
   }[]
+  item: {
+    item_categories: { is_primary: boolean; categories: { id: string; name: string; parent_id: string | null } | null }[]
+    item_tags: { is_primary: boolean; tags: { id: string; name: string } | null }[]
+  } | null
 }
 type EditDraft = {
   name: string
@@ -53,6 +57,8 @@ const emit = defineEmits<{
   'save-edit': []
   remove: []
   nest: []
+  'switch-category': [categoryId: string]
+  'switch-tag': [tagId: string]
 }>()
 
 const isEditing = computed(() => props.editingId === props.item.id)
@@ -124,6 +130,31 @@ const editUnitOptionsForAmount = computed(() => {
             </span>
           </span>
         </label>
+
+        <UBadge
+          v-for="ic in item.item?.item_categories ?? []"
+          :key="ic.categories!.id"
+          size="sm"
+          :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+          class="cursor-pointer"
+          :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+          @click.stop="emit('switch-category', ic.categories!.id)"
+        >
+          <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+          {{ ic.categories!.name }}
+        </UBadge>
+        <UBadge
+          v-for="t in item.item?.item_tags ?? []"
+          :key="t.tags!.id"
+          size="sm"
+          variant="outline"
+          class="cursor-pointer"
+          :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+          @click.stop="emit('switch-tag', t.tags!.id)"
+        >
+          <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+          {{ t.tags!.name }}
+        </UBadge>
       </div>
       <div v-if="editable" class="flex items-center gap-1">
         <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="emit('start-edit')" />

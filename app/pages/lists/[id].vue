@@ -4,8 +4,8 @@ import type { TreeGroupBy, TreeSortBy } from '~/composables/useGroupedItemTree'
 
 type Option = { id: string; name: string; plural_name?: string | null }
 type ItemOption = Option & {
-  item_categories: { categories: { id: string; name: string } | null }[]
-  item_tags: { tags: { id: string; name: string } | null }[]
+  item_categories: { is_primary: boolean; categories: { id: string; name: string; parent_id: string | null } | null }[]
+  item_tags: { is_primary: boolean; tags: { id: string; name: string } | null }[]
 }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
@@ -53,7 +53,7 @@ const { data: listItems } = await useAsyncData(`list-items-${listId}`, async () 
       id, name, amount, size, notes, is_done, item_id, parent_id, sort_order,
       unit:units!list_items_unit_id_fkey(id, name_singular, name_plural),
       list_item_sources(quantity, unit:units(name_singular, name_plural), recipe:recipes(id, name)),
-      item:items(item_categories(categories(id, name)), item_tags(tags(id, name)))
+      item:items(item_categories(is_primary, categories(id, name, parent_id)), item_tags(is_primary, tags(id, name)))
     `)
     .eq('list_id', listId)
     .is('deleted_at', null)
@@ -119,6 +119,41 @@ function onItemTreeChange() {
   persistItemOrder()
 }
 
+// findItem is keyed by a list_item's own id and returns one node - not
+// reusable here, since the same master item_id can appear on multiple
+// list_item rows (added twice, or as both a parent and elsewhere)
+function forEachNodeWithItem(itemId: string, fn: (node: ListItemNode | ListItemRow) => void) {
+  for (const parent of itemTree.value) {
+    if (parent.item_id === itemId) fn(parent)
+    for (const child of parent.children) {
+      if (child.item_id === itemId) fn(child)
+    }
+  }
+}
+
+const { setPrimaryCategory: setPrimaryCategoryLink, setPrimaryTag: setPrimaryTagLink } = useItemCategorization()
+
+function setPrimaryCategory(itemId: string | null, categoryId: string) {
+  if (!itemId) return
+  setPrimaryCategoryLink(itemId, categoryId)
+  forEachNodeWithItem(itemId, (node) => {
+    if (!node.item) return
+    node.item.item_categories = node.item.item_categories.map((ic) => ({
+      ...ic,
+      is_primary: ic.categories?.id === categoryId,
+    }))
+  })
+}
+
+function setPrimaryTag(itemId: string | null, tagId: string) {
+  if (!itemId) return
+  setPrimaryTagLink(itemId, tagId)
+  forEachNodeWithItem(itemId, (node) => {
+    if (!node.item) return
+    node.item.item_tags = node.item.item_tags.map((it) => ({ ...it, is_primary: it.tags?.id === tagId }))
+  })
+}
+
 function indentItem(id: string) {
   const index = itemTree.value.findIndex((p) => p.id === id)
   if (index <= 0) return // nothing to nest under
@@ -165,7 +200,9 @@ const isLiveCustomOrder = computed(
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
   const { data, error } = await supabase
     .from('items')
-    .select('id, name, plural_name, item_categories(categories(id, name)), item_tags(tags(id, name))')
+    .select(
+      'id, name, plural_name, item_categories(is_primary, categories(id, name, parent_id)), item_tags(is_primary, tags(id, name))',
+    )
     .is('deleted_at', null)
     .order('name')
   if (error) throw error
@@ -669,6 +706,8 @@ async function deleteList() {
               @save-edit="saveEdit(li.id)"
               @remove="removeItem(li.id)"
               @nest="indentItem(li.id)"
+              @switch-category="(categoryId) => setPrimaryCategory(li.item_id, categoryId)"
+              @switch-tag="(tagId) => setPrimaryTag(li.item_id, tagId)"
             />
             <draggable
               v-if="li.children.length > 0"
@@ -697,6 +736,8 @@ async function deleteList() {
                     @save-edit="saveEdit(child.id)"
                     @remove="removeItem(child.id)"
                     @nest="outdentItem(child.id, li.id)"
+                    @switch-category="(categoryId) => setPrimaryCategory(child.item_id, categoryId)"
+                    @switch-tag="(tagId) => setPrimaryTag(child.item_id, tagId)"
                   />
                 </li>
               </template>
@@ -724,6 +765,8 @@ async function deleteList() {
               @cancel-edit="cancelEdit"
               @save-edit="saveEdit(node.id)"
               @remove="removeItem(node.id)"
+              @switch-category="(categoryId) => setPrimaryCategory(node.item_id, categoryId)"
+              @switch-tag="(tagId) => setPrimaryTag(node.item_id, tagId)"
             />
             <ul v-if="node.children.length > 0" class="ml-6 mt-2 flex flex-col gap-2">
               <li v-for="child in node.children" :key="child.id">
@@ -741,6 +784,8 @@ async function deleteList() {
                   @cancel-edit="cancelEdit"
                   @save-edit="saveEdit(child.id)"
                   @remove="removeItem(child.id)"
+                  @switch-category="(categoryId) => setPrimaryCategory(child.item_id, categoryId)"
+                  @switch-tag="(tagId) => setPrimaryTag(child.item_id, tagId)"
                 />
               </li>
             </ul>
@@ -764,6 +809,8 @@ async function deleteList() {
           @cancel-edit="cancelEdit"
           @save-edit="saveEdit(node.id)"
           @remove="removeItem(node.id)"
+          @switch-category="(categoryId) => setPrimaryCategory(node.item_id, categoryId)"
+          @switch-tag="(tagId) => setPrimaryTag(node.item_id, tagId)"
         />
         <ul v-if="node.children.length > 0" class="ml-6 mt-2 flex flex-col gap-2">
           <li v-for="child in node.children" :key="child.id">
@@ -781,6 +828,8 @@ async function deleteList() {
               @cancel-edit="cancelEdit"
               @save-edit="saveEdit(child.id)"
               @remove="removeItem(child.id)"
+              @switch-category="(categoryId) => setPrimaryCategory(child.item_id, categoryId)"
+              @switch-tag="(tagId) => setPrimaryTag(child.item_id, tagId)"
             />
           </li>
         </ul>

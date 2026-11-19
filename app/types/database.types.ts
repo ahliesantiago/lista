@@ -530,14 +530,17 @@ export type Database = {
       item_categories: {
         Row: {
           category_id: string
+          is_primary: boolean
           item_id: string
         }
         Insert: {
           category_id: string
+          is_primary?: boolean
           item_id: string
         }
         Update: {
           category_id?: string
+          is_primary?: boolean
           item_id?: string
         }
         Relationships: [
@@ -559,14 +562,17 @@ export type Database = {
       }
       item_tags: {
         Row: {
+          is_primary: boolean
           item_id: string
           tag_id: string
         }
         Insert: {
+          is_primary?: boolean
           item_id: string
           tag_id: string
         }
         Update: {
+          is_primary?: boolean
           item_id?: string
           tag_id?: string
         }
