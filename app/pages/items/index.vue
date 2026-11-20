@@ -188,6 +188,19 @@ async function submitQuickAdd(groupName: string) {
 
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
+
+// the floating create button (CreateFab, in the layout) hides itself while
+// this is true - only the create case counts (not editing). useState
+// persists across navigation, so reset on unmount too - otherwise
+// navigating away while the slideover is open would leave the FAB hidden forever.
+const createFormOpen = useCreateFormOpen()
+watch([slideoverOpen, editingId], ([open, id]) => {
+  createFormOpen.value = open && !id
+})
+onUnmounted(() => {
+  createFormOpen.value = false
+})
+
 const name = ref('')
 const pluralName = ref('')
 const price = ref<number | null>(null)
@@ -271,6 +284,11 @@ function openCreate() {
   resetForm()
   slideoverOpen.value = true
 }
+
+// the floating create button's "Item" option navigates here with ?new=1,
+// same convention already used for a fresh list/recipe's own detail page
+const route = useRoute()
+if (route.query.new === '1') openCreate()
 
 function openEdit(item: NonNullable<typeof items.value>[number]) {
   editingId.value = item.id

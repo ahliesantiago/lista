@@ -232,6 +232,20 @@ async function deleteInventoryItem(id: string) {
 
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
+
+// the floating create button (CreateFab, in the layout) hides itself while
+// this is true - only the create case counts (not editing). useState
+// persists across navigation, so reset on unmount too - otherwise
+// switching between Pantry/Home Inventory while the slideover is open
+// would leave the FAB hidden forever.
+const createFormOpen = useCreateFormOpen()
+watch([slideoverOpen, editingId], ([open, id]) => {
+  createFormOpen.value = open && !id
+})
+onUnmounted(() => {
+  createFormOpen.value = false
+})
+
 const selectedLocations = ref<Option[]>([])
 const selectedRooms = ref<Option[]>([])
 const selectedItem = ref<Option | null>(null)

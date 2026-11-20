@@ -250,5 +250,7 @@ useHead({
         </div>
       </template>
     </USlideover>
+
+    <CreateFab v-if="user" />
   </div>
 </template>
