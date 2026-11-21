@@ -870,6 +870,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          list_type: string
           move_done_to_bottom: boolean
           name: string
           notes: string | null
@@ -884,6 +885,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          list_type?: string
           move_done_to_bottom?: boolean
           name: string
           notes?: string | null
@@ -898,6 +900,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          list_type?: string
           move_done_to_bottom?: boolean
           name?: string
           notes?: string | null

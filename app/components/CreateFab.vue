@@ -7,8 +7,16 @@ const createFormOpen = useCreateFormOpen()
 const promptOpen = ref(false)
 const promptKind = ref<'list' | 'recipe'>('list')
 const promptName = ref('')
+const promptListType = ref<'checklist' | 'bullet' | 'numbered' | 'note'>('checklist')
 const promptError = ref('')
 const promptSaving = ref(false)
+
+const listTypeOptions = [
+  { label: 'Checklist', value: 'checklist' },
+  { label: 'Bullet list', value: 'bullet' },
+  { label: 'Numbered list', value: 'numbered' },
+  { label: 'Note', value: 'note' },
+]
 
 const promptTitle = computed(() => (promptKind.value === 'list' ? 'New List' : 'New Recipe'))
 const promptPlaceholder = computed(() => (promptKind.value === 'list' ? 'List name' : 'Recipe name'))
@@ -16,6 +24,7 @@ const promptPlaceholder = computed(() => (promptKind.value === 'list' ? 'List na
 function openNamePrompt(kind: 'list' | 'recipe') {
   promptKind.value = kind
   promptName.value = ''
+  promptListType.value = 'checklist'
   promptError.value = ''
   promptOpen.value = true
   createFormOpen.value = true
@@ -44,11 +53,18 @@ async function submitPrompt() {
   promptSaving.value = true
 
   const table = promptKind.value === 'list' ? 'lists' : 'recipes'
-  const { data, error: insertError } = await supabase
-    .from(table)
-    .insert({ space_id: space.value.id, name: promptName.value.trim() })
-    .select('id')
-    .single()
+  const { data, error: insertError } =
+    table === 'lists'
+      ? await supabase
+          .from('lists')
+          .insert({ space_id: space.value.id, name: promptName.value.trim(), list_type: promptListType.value })
+          .select('id')
+          .single()
+      : await supabase
+          .from('recipes')
+          .insert({ space_id: space.value.id, name: promptName.value.trim() })
+          .select('id')
+          .single()
 
   promptSaving.value = false
   if (insertError || !data) {
@@ -95,6 +111,10 @@ async function submitPrompt() {
     <template #body>
       <form class="flex flex-col gap-3" @submit.prevent="submitPrompt">
         <UInput v-model="promptName" :placeholder="promptPlaceholder" autofocus required class="w-full" />
+        <template v-if="promptKind === 'list'">
+          <USelect v-model="promptListType" :items="listTypeOptions" value-key="value" class="w-full" />
+          <p class="text-muted -mt-1 text-xs">List type can't be changed after creation.</p>
+        </template>
         <p v-if="promptError" class="text-sm text-red-500">{{ promptError }}</p>
         <UButton type="submit" block :loading="promptSaving">Create</UButton>
       </form>

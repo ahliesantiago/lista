@@ -11,7 +11,7 @@ const { data: lists, refresh } = await useAsyncData('lists', async () => {
   const { data, error } = await supabase
     .from('lists')
     .select(`
-      id, name, status, created_at, sort_order,
+      id, name, status, created_at, sort_order, list_type,
       list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
@@ -42,8 +42,21 @@ const statusFilter = ref<'active' | 'archived'>('active')
 const filterCategories = ref<CategoryOption[]>([])
 const filterTags = ref<Option[]>([])
 
+// "List" groups bullet/unordered + numbered lists together
+type TypeTab = 'list' | 'checklist' | 'note'
+const typeTabs: { value: TypeTab; label: string }[] = [
+  { value: 'checklist', label: 'Checklist' },
+  { value: 'list', label: 'List' },
+  { value: 'note', label: 'Note' },
+]
+const typeTab = ref<TypeTab>('checklist')
+function matchesTypeTab(listType: string) {
+  if (typeTab.value === 'list') return listType === 'bullet' || listType === 'numbered'
+  return listType === typeTab.value
+}
+
 const filteredLists = computed(() => {
-  let list = (lists.value ?? []).filter((l) => l.status === statusFilter.value)
+  let list = (lists.value ?? []).filter((l) => l.status === statusFilter.value && matchesTypeTab(l.list_type))
   if (filterCategories.value.length > 0) {
     const ids = new Set(filterCategories.value.map((c) => c.id))
     list = list.filter((l) => l.list_categories.some((lc) => ids.has(lc.categories!.id)))
@@ -103,6 +116,13 @@ function onListReorder() {
 }
 
 const newName = ref('')
+const newListType = ref<'checklist' | 'bullet' | 'numbered' | 'note'>('checklist')
+const listTypeOptions = [
+  { label: 'Checklist', value: 'checklist' },
+  { label: 'Bullet list', value: 'bullet' },
+  { label: 'Numbered list', value: 'numbered' },
+  { label: 'Note', value: 'note' },
+]
 const error = ref('')
 const creating = ref(false)
 
@@ -112,7 +132,7 @@ async function createList() {
   creating.value = true
   const { data, error: insertError } = await supabase
     .from('lists')
-    .insert({ space_id: space.value.id, name: newName.value.trim() })
+    .insert({ space_id: space.value.id, name: newName.value.trim(), list_type: newListType.value })
     .select('id')
     .single()
   if (insertError || !data) {
@@ -140,28 +160,47 @@ async function deleteList(id: string) {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <form class="mb-6 flex gap-2" @submit.prevent="createList">
+    <form class="mb-1 flex gap-2" @submit.prevent="createList">
       <UInput v-model="newName" placeholder="New list name" required class="flex-1" />
+      <USelect v-model="newListType" :items="listTypeOptions" value-key="value" class="w-40" />
       <UButton type="submit" :loading="creating">Add</UButton>
     </form>
+    <p class="text-muted mb-6 text-xs">List type can't be changed after creation.</p>
 
     <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>
 
-    <div class="mb-4 flex gap-2">
-      <UButton
-        size="sm"
-        :variant="statusFilter === 'active' ? 'solid' : 'ghost'"
-        @click="statusFilter = 'active'"
-      >
-        Active
-      </UButton>
-      <UButton
-        size="sm"
-        :variant="statusFilter === 'archived' ? 'solid' : 'ghost'"
-        @click="statusFilter = 'archived'"
-      >
-        Archived
-      </UButton>
+    <div class="mb-4 flex items-center justify-between gap-2 border-b border-default">
+      <div class="flex gap-2">
+        <button
+          v-for="tab in typeTabs"
+          :key="tab.value"
+          type="button"
+          class="border-b-2 px-3 py-2 text-sm font-medium"
+          :class="
+            typeTab === tab.value
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted hover:text-default'
+          "
+          @click="typeTab = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div class="flex gap-2">
+        <UButton size="sm" :variant="statusFilter === 'active' ? 'solid' : 'ghost'" @click="statusFilter = 'active'">
+          <UIcon name="i-lucide-list" class="sm:hidden" />
+          <span class="hidden sm:inline">Active</span>
+        </UButton>
+        <UButton
+          size="sm"
+          :variant="statusFilter === 'archived' ? 'solid' : 'ghost'"
+          @click="statusFilter = 'archived'"
+        >
+          <UIcon name="i-lucide-archive" class="sm:hidden" />
+          <span class="hidden sm:inline">Archived</span>
+        </UButton>
+      </div>
     </div>
 
     <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">

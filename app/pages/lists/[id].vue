@@ -27,7 +27,7 @@ const { data: list } = await useAsyncData(`list-${listId}`, async () => {
   const { data, error } = await supabase
     .from('lists')
     .select(`
-      id, name, description, notes, status, move_done_to_bottom,
+      id, name, description, notes, status, move_done_to_bottom, list_type,
       list_categories(categories(id, name, parent_id)),
       list_tags(tags(id, name))
     `)
@@ -193,9 +193,24 @@ watch(moveDoneToBottom, (v) => saveListField({ move_done_to_bottom: v }))
 
 const { groupedTree, flatSortedTree } = useGroupedItemTree(itemTree, sortBy, groupBy, moveDoneToBottom)
 
+// bullet/numbered lists have no sort/group/done-to-bottom UI at all (see
+// addPlainItem below) - they're always in live drag order, so this only
+// ever falls through to the grouped/flat read-only branches for checklist
 const isLiveCustomOrder = computed(
-  () => sortBy.value === 'custom' && groupBy.value === 'none' && !moveDoneToBottom.value,
+  () =>
+    list.value?.list_type !== 'checklist' ||
+    (sortBy.value === 'custom' && groupBy.value === 'none' && !moveDoneToBottom.value),
 )
+
+// markers for bullet/numbered rows - top-level numbers, lettered children
+// (a classic outline convention), computed from the item's own position
+function markerFor(index: number, depth: 0 | 1): string | null {
+  if (list.value?.list_type === 'bullet') return depth === 0 ? '•' : '◦'
+  if (list.value?.list_type === 'numbered') {
+    return depth === 0 ? `${index + 1}.` : `${String.fromCharCode(97 + index)}.`
+  }
+  return null
+}
 
 const { data: itemOptionsInitial } = await useAsyncData('item-options', async () => {
   const { data, error } = await supabase
@@ -432,6 +447,46 @@ async function addItem() {
   itemPickerKey.value++
 }
 
+const plainItemName = ref('')
+
+// bullet/numbered items are never linked to the master item table at all -
+// no resolveItem(), no item_units, no amount/unit/size
+async function addPlainItem() {
+  if (!plainItemName.value.trim()) return
+  error.value = ''
+  adding.value = true
+
+  const nameValue = plainItemName.value.trim()
+  const { data: newRow, error: insertError } = await supabase
+    .from('list_items')
+    .insert({ list_id: listId, item_id: null, name: nameValue, parent_id: null, sort_order: itemTree.value.length })
+    .select('id')
+    .single()
+
+  adding.value = false
+  if (insertError || !newRow) {
+    error.value = insertError?.message ?? 'Failed to add item'
+    return
+  }
+
+  itemTree.value.push({
+    id: newRow.id,
+    name: nameValue,
+    amount: null,
+    size: null,
+    notes: null,
+    is_done: false,
+    item_id: null,
+    parent_id: null,
+    sort_order: itemTree.value.length,
+    unit: null,
+    list_item_sources: [],
+    item: null,
+    children: [],
+  })
+  plainItemName.value = ''
+}
+
 async function toggleDone(id: string, isDone: boolean) {
   await supabase.from('list_items').update({ is_done: !isDone }).eq('id', id)
   const found = findItem(id)
@@ -555,7 +610,8 @@ async function deleteList() {
       <div v-if="viewMode === 'view'" class="flex-1">
         <h1 class="mb-1 text-lg font-semibold">{{ list.name }}</h1>
         <p v-if="list.description" class="text-muted mb-2 text-sm">{{ list.description }}</p>
-        <p v-if="list.notes" class="text-muted mb-2 text-sm">{{ list.notes }}</p>
+        <p v-if="list.notes && list.list_type !== 'note'" class="text-muted mb-2 text-sm">{{ list.notes }}</p>
+        <p v-if="list.list_type === 'note' && list.notes" class="mb-2 whitespace-pre-wrap">{{ list.notes }}</p>
         <div class="flex flex-wrap gap-1">
           <UBadge v-for="c in selectedCategories" :key="c.id" size="sm" variant="solid">{{ c.name }}</UBadge>
           <UBadge v-for="c in selectedSubcategories" :key="c.id" size="sm" variant="subtle">{{ c.name }}</UBadge>
@@ -574,7 +630,16 @@ async function deleteList() {
           class="mb-2 w-full"
           @blur="saveListField({ description: description || null })"
         />
+        <UTextarea
+          v-if="list.list_type === 'note'"
+          v-model="notes"
+          placeholder="Write your note..."
+          :rows="12"
+          class="mb-2 w-full"
+          @blur="saveListField({ notes: notes || null })"
+        />
         <UInput
+          v-else
           v-model="notes"
           placeholder="Notes (optional)"
           class="mb-2 w-full"
@@ -629,11 +694,13 @@ async function deleteList() {
       </div>
     </div>
 
-    <div class="mb-4 flex gap-2">
+    <template v-if="list.list_type !== 'note'">
+    <div v-if="list.list_type === 'checklist'" class="mb-4 flex gap-2">
       <UButton size="sm" variant="ghost" @click="checkAll(true)">Check all</UButton>
       <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
     </div>
 
+    <template v-if="list.list_type === 'checklist'">
     <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
       <div>
         <label class="text-muted mb-1 block text-xs">Sort by</label>
@@ -650,9 +717,10 @@ async function deleteList() {
     <p v-if="!isLiveCustomOrder && sortBy === 'custom'" class="text-muted mb-4 text-xs">
       Drag-and-drop reordering and nesting are only available with custom order, no grouping, and crossed-off items kept in place.
     </p>
+    </template>
 
     <form
-      v-if="viewMode === 'edit'"
+      v-if="viewMode === 'edit' && list.list_type === 'checklist'"
       class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
       @submit.prevent="addItem"
     >
@@ -679,6 +747,15 @@ async function deleteList() {
       <UButton type="submit" :loading="adding">Add item</UButton>
     </form>
 
+    <form
+      v-if="viewMode === 'edit' && list.list_type !== 'checklist'"
+      class="mb-6 flex gap-2"
+      @submit.prevent="addPlainItem"
+    >
+      <UInput v-model="plainItemName" placeholder="New item" class="flex-1" />
+      <UButton type="submit" :loading="adding">Add</UButton>
+    </form>
+
     <template v-if="isLiveCustomOrder">
       <draggable
         v-model="itemTree"
@@ -693,13 +770,15 @@ async function deleteList() {
           <li>
             <ListItemRow
               :item="li"
+              :variant="list.list_type === 'checklist' ? 'checklist' : 'plain'"
+              :marker="markerFor(itemTree.indexOf(li), 0)"
               :nest-button="viewMode === 'edit' && itemTree.indexOf(li) > 0 && li.children.length === 0 ? 'indent' : null"
               :reorderable="viewMode === 'edit'"
               :editable="viewMode === 'edit'"
               :editing-id="editingItemId"
               v-model:draft="editDraft"
-              :unit-options="unitOptions ?? []"
-              :extra-edit-unit-option="extraEditUnitOption"
+              :unit-options="list.list_type === 'checklist' ? (unitOptions ?? []) : []"
+              :extra-edit-unit-option="list.list_type === 'checklist' ? extraEditUnitOption : null"
               @toggle-done="toggleDone(li.id, li.is_done)"
               @start-edit="startEdit(li)"
               @cancel-edit="cancelEdit"
@@ -723,13 +802,15 @@ async function deleteList() {
                 <li>
                   <ListItemRow
                     :item="child"
+                    :variant="list.list_type === 'checklist' ? 'checklist' : 'plain'"
+                    :marker="markerFor(li.children.indexOf(child), 1)"
                     :nest-button="viewMode === 'edit' ? 'outdent' : null"
                     :reorderable="viewMode === 'edit'"
                     :editable="viewMode === 'edit'"
                     :editing-id="editingItemId"
                     v-model:draft="editDraft"
-                    :unit-options="unitOptions ?? []"
-                    :extra-edit-unit-option="extraEditUnitOption"
+                    :unit-options="list.list_type === 'checklist' ? (unitOptions ?? []) : []"
+                    :extra-edit-unit-option="list.list_type === 'checklist' ? extraEditUnitOption : null"
                     @toggle-done="toggleDone(child.id, child.is_done)"
                     @start-edit="startEdit(child)"
                     @cancel-edit="cancelEdit"
@@ -753,6 +834,8 @@ async function deleteList() {
           <li v-for="node in nodes" :key="node.id">
             <ListItemRow
               :item="node"
+              variant="checklist"
+              :marker="null"
               :nest-button="null"
               :reorderable="false"
               :editable="viewMode === 'edit'"
@@ -772,6 +855,8 @@ async function deleteList() {
               <li v-for="child in node.children" :key="child.id">
                 <ListItemRow
                   :item="child"
+                  variant="checklist"
+                  :marker="null"
                   :nest-button="null"
                   :reorderable="false"
                   :editable="viewMode === 'edit'"
@@ -797,6 +882,8 @@ async function deleteList() {
       <li v-for="node in flatSortedTree" :key="node.id">
         <ListItemRow
           :item="node"
+          variant="checklist"
+          :marker="null"
           :nest-button="null"
           :reorderable="false"
           :editable="viewMode === 'edit'"
@@ -816,6 +903,8 @@ async function deleteList() {
           <li v-for="child in node.children" :key="child.id">
             <ListItemRow
               :item="child"
+              variant="checklist"
+              :marker="null"
               :nest-button="null"
               :reorderable="false"
               :editable="viewMode === 'edit'"
@@ -836,5 +925,6 @@ async function deleteList() {
       </li>
     </ul>
     <p v-if="itemTree.length === 0" class="text-muted text-sm">No items yet.</p>
+    </template>
   </div>
 </template>

@@ -38,6 +38,11 @@ const UNIT_FILTER_FIELDS = ['name_singular', 'name_plural', 'abbrev_singular', '
 
 const props = defineProps<{
   item: ItemRow
+  // 'checklist': checkbox + amount/unit/size/notes/sources + category/tag
+  // badges, as before. 'plain': a bullet/number marker + name only, no
+  // master-item link ever exists for these rows so none of that applies.
+  variant: 'checklist' | 'plain'
+  marker: string | null
   // null => no nest affordance shown at all; caller decides when indenting
   // or outdenting this particular row is actually valid
   nestButton: 'indent' | 'outdent' | null
@@ -116,7 +121,9 @@ const editUnitOptionsForAmount = computed(() => {
           title="Move to top level"
           @click="emit('nest')"
         />
-        <label class="flex flex-1 items-center gap-3">
+        <span v-if="variant === 'plain'" class="text-muted w-5 shrink-0 text-center">{{ marker }}</span>
+
+        <label v-if="variant === 'checklist'" class="flex flex-1 items-center gap-3">
           <UCheckbox :model-value="item.is_done" @update:model-value="emit('toggle-done')" />
           <span :class="{ 'text-muted line-through': item.is_done }">
             {{ item.name }}
@@ -130,31 +137,34 @@ const editUnitOptionsForAmount = computed(() => {
             </span>
           </span>
         </label>
+        <span v-else class="flex-1">{{ item.name }}</span>
 
-        <UBadge
-          v-for="ic in item.item?.item_categories ?? []"
-          :key="ic.categories!.id"
-          size="sm"
-          :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-          class="cursor-pointer"
-          :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-          @click.stop="emit('switch-category', ic.categories!.id)"
-        >
-          <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-          {{ ic.categories!.name }}
-        </UBadge>
-        <UBadge
-          v-for="t in item.item?.item_tags ?? []"
-          :key="t.tags!.id"
-          size="sm"
-          variant="outline"
-          class="cursor-pointer"
-          :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-          @click.stop="emit('switch-tag', t.tags!.id)"
-        >
-          <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-          {{ t.tags!.name }}
-        </UBadge>
+        <template v-if="variant === 'checklist'">
+          <UBadge
+            v-for="ic in item.item?.item_categories ?? []"
+            :key="ic.categories!.id"
+            size="sm"
+            :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+            class="cursor-pointer"
+            :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+            @click.stop="emit('switch-category', ic.categories!.id)"
+          >
+            <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+            {{ ic.categories!.name }}
+          </UBadge>
+          <UBadge
+            v-for="t in item.item?.item_tags ?? []"
+            :key="t.tags!.id"
+            size="sm"
+            variant="outline"
+            class="cursor-pointer"
+            :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+            @click.stop="emit('switch-tag', t.tags!.id)"
+          >
+            <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+            {{ t.tags!.name }}
+          </UBadge>
+        </template>
       </div>
       <div v-if="editable" class="flex items-center gap-1">
         <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="emit('start-edit')" />
@@ -163,9 +173,9 @@ const editUnitOptionsForAmount = computed(() => {
     </div>
 
     <div v-else-if="draft" class="flex flex-col gap-2">
-      <UInput v-if="draft.isListOnly" v-model="draft.name" placeholder="Name" />
+      <UInput v-if="variant === 'plain' || draft.isListOnly" v-model="draft.name" placeholder="Name" />
       <span v-else class="font-medium">{{ item.name }}</span>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div v-if="variant === 'checklist'" class="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <UInputNumber v-model="draft.amount" placeholder="Qty" :min="0" />
         <USelectMenu
           v-model="draft.unitId"
@@ -177,7 +187,7 @@ const editUnitOptionsForAmount = computed(() => {
         />
         <UInput v-model="draft.size" placeholder="Size" />
       </div>
-      <UInput v-model="draft.notes" placeholder="Notes (optional)" />
+      <UInput v-if="variant === 'checklist'" v-model="draft.notes" placeholder="Notes (optional)" />
       <div class="flex gap-2">
         <UButton size="sm" @click="emit('save-edit')">Save</UButton>
         <UButton size="sm" variant="ghost" @click="emit('cancel-edit')">Cancel</UButton>
