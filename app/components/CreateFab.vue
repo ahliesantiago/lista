@@ -48,6 +48,7 @@ const speedDialItems = [
 ]
 
 async function submitPrompt() {
+  if (promptSaving.value) return // already in flight - ignore a second click/Enter
   if (!space.value || !promptName.value.trim()) return
   promptError.value = ''
   promptSaving.value = true

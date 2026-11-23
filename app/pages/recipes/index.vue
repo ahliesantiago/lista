@@ -134,6 +134,7 @@ const createError = ref('')
 const creating = ref(false)
 
 async function createRecipe() {
+  if (creating.value) return // already in flight - ignore a second click/Enter
   if (!space.value) return
   createError.value = ''
   creating.value = true

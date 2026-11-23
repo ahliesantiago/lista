@@ -157,29 +157,36 @@ function collapseAllGroups() {
 
 const quickAddOpenFor = ref<string | null>(null)
 const quickAddName = ref('')
+const quickAdding = ref(false)
 function openQuickAdd(groupName: string) {
   quickAddOpenFor.value = groupName
   quickAddName.value = ''
 }
 async function submitQuickAdd(groupName: string) {
+  if (quickAdding.value) return // already in flight - ignore a second click/Enter
   if (!space.value || !quickAddName.value.trim()) return
-  const { data, error: insertError } = await supabase
-    .from('items')
-    .insert({ space_id: space.value.id, name: capitalizeFirst(quickAddName.value.trim()) })
-    .select('id')
-    .single()
-  if (insertError || !data) return
-  if (groupBy.value === 'category') {
-    const categoryId = categoryIdByName.value.get(groupName)
-    // this is the first (and only) category this item has - it must be
-    // primary, or it'd fall straight back into "Uncategorized" despite
-    // being quick-added into a named group
-    if (categoryId) {
-      await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId, is_primary: true })
+  quickAdding.value = true
+  try {
+    const { data, error: insertError } = await supabase
+      .from('items')
+      .insert({ space_id: space.value.id, name: capitalizeFirst(quickAddName.value.trim()) })
+      .select('id')
+      .single()
+    if (insertError || !data) return
+    if (groupBy.value === 'category') {
+      const categoryId = categoryIdByName.value.get(groupName)
+      // this is the first (and only) category this item has - it must be
+      // primary, or it'd fall straight back into "Uncategorized" despite
+      // being quick-added into a named group
+      if (categoryId) {
+        await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId, is_primary: true })
+      }
+    } else if (groupBy.value === 'tag') {
+      const tagId = tagIdByName.value.get(groupName)
+      if (tagId) await supabase.from('item_tags').insert({ item_id: data.id, tag_id: tagId, is_primary: true })
     }
-  } else if (groupBy.value === 'tag') {
-    const tagId = tagIdByName.value.get(groupName)
-    if (tagId) await supabase.from('item_tags').insert({ item_id: data.id, tag_id: tagId, is_primary: true })
+  } finally {
+    quickAdding.value = false
   }
   quickAddOpenFor.value = null
   quickAddName.value = ''
@@ -321,6 +328,7 @@ async function onCreateTag(searchTerm: string) {
 }
 
 async function save() {
+  if (saving.value) return // already in flight - ignore a second click/Enter
   if (!space.value) return
   error.value = ''
   saving.value = true
@@ -457,9 +465,9 @@ async function deleteItem(id: string) {
           class="mb-2 flex gap-2"
           @submit.prevent="submitQuickAdd(groupName)"
         >
-          <UInput v-model="quickAddName" autofocus placeholder="Item name" class="flex-1" />
-          <UButton type="submit" size="sm">Add</UButton>
-          <UButton size="sm" variant="ghost" @click="quickAddOpenFor = null">Cancel</UButton>
+          <UInput v-model="quickAddName" :disabled="quickAdding" autofocus placeholder="Item name" class="flex-1" />
+          <UButton type="submit" size="sm" :loading="quickAdding">Add</UButton>
+          <UButton size="sm" variant="ghost" :disabled="quickAdding" @click="quickAddOpenFor = null">Cancel</UButton>
         </form>
         <ul v-if="isGroupExpanded(groupName)" class="flex flex-col gap-2">
           <li

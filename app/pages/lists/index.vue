@@ -127,6 +127,7 @@ const error = ref('')
 const creating = ref(false)
 
 async function createList() {
+  if (creating.value) return // already in flight - ignore a second click/Enter
   if (!space.value) return
   error.value = ''
   creating.value = true

@@ -370,6 +370,7 @@ const extraEditUnitOption = ref<{ id: string; name_singular: string; name_plural
 const { resolveItem } = useResolveMasterItem()
 
 async function addItem() {
+  if (adding.value) return // already in flight - ignore a second click/Enter
   if (!space.value || !selectedItem.value || !selectedItem.value.name.trim()) return
 
   error.value = ''
@@ -452,6 +453,7 @@ const plainItemName = ref('')
 // bullet/numbered items are never linked to the master item table at all -
 // no resolveItem(), no item_units, no amount/unit/size
 async function addPlainItem() {
+  if (adding.value) return // already in flight - ignore a second click/Enter
   if (!plainItemName.value.trim()) return
   error.value = ''
   adding.value = true
@@ -536,6 +538,7 @@ function onPlainNamePaste(event: ClipboardEvent) {
 type BulkDraftRow = { name: string; addToMasterList: boolean }
 const bulkReviewOpen = ref(false)
 const bulkDraftRows = ref<BulkDraftRow[]>([])
+const bulkSubmitting = ref(false)
 
 function matchFor(itemName: string) {
   const term = itemName.trim().toLowerCase()
@@ -553,73 +556,79 @@ function onChecklistNamePaste(event: ClipboardEvent) {
 // mirrors addItem()'s resolveItem() usage, but resolved live per-row
 // against the current itemOptions rather than a single picked-or-typed value
 async function submitBulkReview() {
+  if (bulkSubmitting.value) return // already in flight - ignore a second click
   const rows = bulkDraftRows.value.filter((r) => r.name.trim())
   if (rows.length === 0) {
     bulkReviewOpen.value = false
     return
   }
 
-  const resolved: { name: string; itemId: string | null }[] = []
-  for (const row of rows) {
-    const rowName = row.name.trim()
-    const match = matchFor(rowName)
-    if (match) {
-      resolved.push({ name: match.name, itemId: match.id })
-      continue
-    }
-    if (row.addToMasterList && space.value) {
-      const { data } = await supabase
-        .from('items')
-        .insert({ space_id: space.value.id, name: capitalizeFirst(rowName) })
-        .select('id, name')
-        .single()
-      if (data) {
-        itemOptions.value.push({ id: data.id, name: data.name, item_categories: [], item_tags: [] })
-        resolved.push({ name: data.name, itemId: data.id })
+  bulkSubmitting.value = true
+  try {
+    const resolved: { name: string; itemId: string | null }[] = []
+    for (const row of rows) {
+      const rowName = row.name.trim()
+      const match = matchFor(rowName)
+      if (match) {
+        resolved.push({ name: match.name, itemId: match.id })
         continue
       }
+      if (row.addToMasterList && space.value) {
+        const { data } = await supabase
+          .from('items')
+          .insert({ space_id: space.value.id, name: capitalizeFirst(rowName) })
+          .select('id, name')
+          .single()
+        if (data) {
+          itemOptions.value.push({ id: data.id, name: data.name, item_categories: [], item_tags: [] })
+          resolved.push({ name: data.name, itemId: data.id })
+          continue
+        }
+      }
+      resolved.push({ name: rowName, itemId: null })
     }
-    resolved.push({ name: rowName, itemId: null })
-  }
 
-  const baseIndex = itemTree.value.length
-  const { data: newRows, error: insertError } = await supabase
-    .from('list_items')
-    .insert(
-      resolved.map((r, i) => ({
-        list_id: listId,
-        item_id: r.itemId,
+    const baseIndex = itemTree.value.length
+    const { data: newRows, error: insertError } = await supabase
+      .from('list_items')
+      .insert(
+        resolved.map((r, i) => ({
+          list_id: listId,
+          item_id: r.itemId,
+          name: r.name,
+          parent_id: null,
+          sort_order: baseIndex + i,
+        })),
+      )
+      .select('id')
+
+    if (insertError || !newRows) {
+      error.value = insertError?.message ?? 'Failed to add items'
+      return
+    }
+
+    newRows.forEach((newRow, i) => {
+      const r = resolved[i]!
+      const optionMatch = r.itemId ? itemOptions.value.find((o) => o.id === r.itemId) : null
+      itemTree.value.push({
+        id: newRow.id,
         name: r.name,
+        amount: null,
+        size: null,
+        notes: null,
+        is_done: false,
+        item_id: r.itemId,
         parent_id: null,
         sort_order: baseIndex + i,
-      })),
-    )
-    .select('id')
-
-  if (insertError || !newRows) {
-    error.value = insertError?.message ?? 'Failed to add items'
-    return
-  }
-
-  newRows.forEach((newRow, i) => {
-    const r = resolved[i]!
-    const optionMatch = r.itemId ? itemOptions.value.find((o) => o.id === r.itemId) : null
-    itemTree.value.push({
-      id: newRow.id,
-      name: r.name,
-      amount: null,
-      size: null,
-      notes: null,
-      is_done: false,
-      item_id: r.itemId,
-      parent_id: null,
-      sort_order: baseIndex + i,
-      unit: null,
-      list_item_sources: [],
-      item: { item_categories: optionMatch?.item_categories ?? [], item_tags: optionMatch?.item_tags ?? [] },
-      children: [],
+        unit: null,
+        list_item_sources: [],
+        item: { item_categories: optionMatch?.item_categories ?? [], item_tags: optionMatch?.item_tags ?? [] },
+        children: [],
+      })
     })
-  })
+  } finally {
+    bulkSubmitting.value = false
+  }
 
   bulkReviewOpen.value = false
   bulkDraftRows.value = []
@@ -1067,21 +1076,27 @@ async function deleteList() {
     <p v-if="itemTree.length === 0" class="text-muted text-sm">No items yet.</p>
     </template>
 
-    <UModal v-model:open="bulkReviewOpen" title="Review pasted items">
+    <UModal v-model:open="bulkReviewOpen" title="Review pasted items" :dismissible="!bulkSubmitting">
       <template #body>
         <div class="flex flex-col gap-2">
           <div v-for="(row, i) in bulkDraftRows" :key="i" class="flex items-center gap-2">
-            <UInput v-model="row.name" class="flex-1" />
+            <UInput v-model="row.name" :disabled="bulkSubmitting" class="flex-1" />
             <UBadge v-if="matchFor(row.name)" color="success" variant="subtle">In master list</UBadge>
-            <UCheckbox v-else v-model="row.addToMasterList" label="Add to master list" />
-            <UButton size="sm" variant="ghost" icon="i-lucide-x" @click="bulkDraftRows.splice(i, 1)" />
+            <UCheckbox v-else v-model="row.addToMasterList" :disabled="bulkSubmitting" label="Add to master list" />
+            <UButton
+              size="sm"
+              variant="ghost"
+              icon="i-lucide-x"
+              :disabled="bulkSubmitting"
+              @click="bulkDraftRows.splice(i, 1)"
+            />
           </div>
           <p v-if="bulkDraftRows.length === 0" class="text-muted text-sm">No items left to add.</p>
           <div class="mt-2 flex gap-2">
-            <UButton :disabled="bulkDraftRows.length === 0" @click="submitBulkReview">
+            <UButton :disabled="bulkDraftRows.length === 0" :loading="bulkSubmitting" @click="submitBulkReview">
               Add {{ bulkDraftRows.length }} item{{ bulkDraftRows.length === 1 ? '' : 's' }}
             </UButton>
-            <UButton variant="ghost" @click="bulkReviewOpen = false">Cancel</UButton>
+            <UButton variant="ghost" :disabled="bulkSubmitting" @click="bulkReviewOpen = false">Cancel</UButton>
           </div>
         </div>
       </template>

@@ -329,6 +329,7 @@ async function onCreateItemOption(searchTerm: string) {
 }
 
 async function save() {
+  if (saving.value) return // already in flight - ignore a second click/Enter
   if (!space.value || !selectedItem.value) return
   error.value = ''
   saving.value = true
