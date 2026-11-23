@@ -193,6 +193,90 @@ async function submitQuickAdd(groupName: string) {
   await refresh()
 }
 
+function matchExistingItem(name: string) {
+  const term = name.trim().toLowerCase()
+  return items.value?.find((it) => it.name.toLowerCase() === term) ?? null
+}
+
+type QuickAddDraftRow = { name: string }
+const quickAddBulkOpen = ref(false)
+const quickAddBulkGroup = ref<string | null>(null)
+const quickAddBulkRows = ref<QuickAddDraftRow[]>([])
+const quickAddBulkSubmitting = ref(false)
+
+function onQuickAddPaste(event: ClipboardEvent, groupName: string) {
+  const lines = splitPastedLines(event.clipboardData?.getData('text/plain') ?? '')
+  if (lines.length < 2) return // a single-line paste behaves exactly as before
+  event.preventDefault()
+  quickAddBulkGroup.value = groupName
+  quickAddBulkRows.value = lines.map((name) => ({ name }))
+  quickAddBulkOpen.value = true
+}
+
+// unlike the single quick-add, a pasted batch can easily include a name
+// that already exists in the master list - items are unique by name per
+// space, so reuse the existing item instead of trying (and failing) to
+// insert a duplicate
+async function submitQuickAddBulkReview() {
+  if (quickAddBulkSubmitting.value) return // already in flight - ignore a second click
+  const groupName = quickAddBulkGroup.value
+  if (!groupName || !space.value) return
+  const rows = quickAddBulkRows.value.filter((r) => r.name.trim())
+  if (rows.length === 0) {
+    quickAddBulkOpen.value = false
+    return
+  }
+
+  quickAddBulkSubmitting.value = true
+  try {
+    for (const row of rows) {
+      const name = row.name.trim()
+      const existing = matchExistingItem(name)
+
+      let itemId = existing?.id ?? null
+      if (!itemId) {
+        const { data } = await supabase
+          .from('items')
+          .insert({ space_id: space.value.id, name: capitalizeFirst(name) })
+          .select('id')
+          .single()
+        if (!data) continue
+        itemId = data.id
+      }
+
+      if (groupBy.value === 'category') {
+        const categoryId = categoryIdByName.value.get(groupName)
+        if (!categoryId) continue
+        const alreadyLinked = existing?.item_categories.some((ic) => ic.categories?.id === categoryId)
+        if (alreadyLinked) continue
+        // only becomes primary if this is the item's first category - bulk-
+        // adding an already-categorized item into another group shouldn't
+        // silently steal its existing primary grouping
+        const isFirstCategory = !existing || existing.item_categories.length === 0
+        await supabase
+          .from('item_categories')
+          .insert({ item_id: itemId, category_id: categoryId, is_primary: isFirstCategory })
+      } else if (groupBy.value === 'tag') {
+        const tagId = tagIdByName.value.get(groupName)
+        if (!tagId) continue
+        const alreadyLinked = existing?.item_tags.some((it) => it.tags?.id === tagId)
+        if (alreadyLinked) continue
+        const isFirstTag = !existing || existing.item_tags.length === 0
+        await supabase.from('item_tags').insert({ item_id: itemId, tag_id: tagId, is_primary: isFirstTag })
+      }
+    }
+  } finally {
+    quickAddBulkSubmitting.value = false
+  }
+
+  quickAddBulkOpen.value = false
+  quickAddBulkRows.value = []
+  quickAddBulkGroup.value = null
+  quickAddOpenFor.value = null
+  quickAddName.value = ''
+  await refresh()
+}
+
 const slideoverOpen = ref(false)
 const editingId = ref<string | null>(null)
 
@@ -464,6 +548,7 @@ async function deleteItem(id: string) {
           v-if="quickAddOpenFor === groupName"
           class="mb-2 flex gap-2"
           @submit.prevent="submitQuickAdd(groupName)"
+          @paste="onQuickAddPaste($event, groupName)"
         >
           <UInput v-model="quickAddName" :disabled="quickAdding" autofocus placeholder="Item name" class="flex-1" />
           <UButton type="submit" size="sm" :loading="quickAdding">Add</UButton>
@@ -652,5 +737,37 @@ async function deleteItem(id: string) {
         </form>
       </template>
     </USlideover>
+
+    <UModal v-model:open="quickAddBulkOpen" title="Review pasted items" :dismissible="!quickAddBulkSubmitting">
+      <template #body>
+        <div class="flex flex-col gap-2">
+          <div v-for="(row, i) in quickAddBulkRows" :key="i" class="flex items-center gap-2">
+            <UInput v-model="row.name" :disabled="quickAddBulkSubmitting" class="flex-1" />
+            <UBadge v-if="matchExistingItem(row.name)" color="success" variant="subtle">Already in master list</UBadge>
+            <UBadge v-else variant="outline">New item</UBadge>
+            <UButton
+              size="sm"
+              variant="ghost"
+              icon="i-lucide-x"
+              :disabled="quickAddBulkSubmitting"
+              @click="quickAddBulkRows.splice(i, 1)"
+            />
+          </div>
+          <p v-if="quickAddBulkRows.length === 0" class="text-muted text-sm">No items left to add.</p>
+          <div class="mt-2 flex gap-2">
+            <UButton
+              :disabled="quickAddBulkRows.length === 0"
+              :loading="quickAddBulkSubmitting"
+              @click="submitQuickAddBulkReview"
+            >
+              Add {{ quickAddBulkRows.length }} item{{ quickAddBulkRows.length === 1 ? '' : 's' }}
+            </UButton>
+            <UButton variant="ghost" :disabled="quickAddBulkSubmitting" @click="quickAddBulkOpen = false">
+              Cancel
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

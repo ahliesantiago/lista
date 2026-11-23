@@ -490,12 +490,7 @@ async function addPlainItem() {
 }
 
 // --- paste a chunk of text to create multiple items at once ---
-function splitPastedLines(text: string): string[] {
-  return text
-    .split(/\r\n|\r|\n/)
-    .map((line) => line.trim().replace(/^(?:[-*•◦]|\d+[.)]|[a-zA-Z][.)])\s+/, '').trim())
-    .filter((line) => line.length > 0)
-}
+// splitPastedLines is shared via app/composables/usePastedLines.ts
 
 async function addPlainItems(lines: string[]) {
   const baseIndex = itemTree.value.length
