@@ -136,6 +136,18 @@ groupBy.value = 'category'
 const categoryIdByName = computed(() => new Map((categoryOptions.value ?? []).map((c) => [c.name, c.id])))
 const tagIdByName = computed(() => new Map(tagOptions.value.map((t) => [t.name, t.id])))
 
+// Pin "Uncategorized" to the end of the list of groups
+const displayGroups = computed(() => {
+  const g = groupedItems.value
+  if (!g) return g
+  const uncategorizedIndex = g.findIndex(([groupName]) => groupName === 'Uncategorized')
+  if (uncategorizedIndex === -1) return g
+  const copy = [...g]
+  const [uncategorized] = copy.splice(uncategorizedIndex, 1)
+  copy.push(uncategorized!)
+  return copy
+})
+
 // groups default expanded (unlike Trash's collapse-by-default) - the
 // Masterlist's whole point is browsing/finding items, so hiding content
 // by default would work against that
@@ -466,6 +478,128 @@ async function deleteItem(id: string) {
   await supabase.from('items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   await refresh()
 }
+
+// --- bulk select / delete / edit category ---
+const selectedIds = ref<Set<string>>(new Set())
+function toggleSelected(id: string) {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+}
+function clearSelection() {
+  selectedIds.value.clear()
+}
+
+const bulkDeleting = ref(false)
+async function bulkDelete() {
+  if (bulkDeleting.value) return // already in flight - ignore a second click
+  const ids = [...selectedIds.value]
+  if (ids.length === 0) return
+  bulkDeleting.value = true
+  try {
+    await supabase.from('items').update({ deleted_at: new Date().toISOString() }).in('id', ids)
+  } finally {
+    bulkDeleting.value = false
+  }
+  selectedIds.value.clear()
+  await refresh()
+}
+
+const bulkEditCategoryOpen = ref(false)
+const bulkCategories = ref<CategoryOption[]>([])
+const bulkSubcategories = ref<CategoryOption[]>([])
+const bulkEditSubmitting = ref(false)
+const bulkEditResultMessage = ref('')
+
+const bulkSubcategoryOptions = computed(() => {
+  const parentIds = new Set(bulkCategories.value.map((c) => c.id))
+  return categoryOptions.value?.filter((c) => c.parent_id && parentIds.has(c.parent_id)) ?? []
+})
+
+watch(bulkCategories, (val) => {
+  if (val.length > MAX_CATEGORIES) {
+    bulkCategories.value = val.slice(0, MAX_CATEGORIES)
+    return
+  }
+  const parentIds = new Set(val.map((c) => c.id))
+  bulkSubcategories.value = bulkSubcategories.value.filter((s) => s.parent_id && parentIds.has(s.parent_id))
+})
+watch(bulkSubcategories, (val) => {
+  if (val.length > MAX_SUBCATEGORIES) {
+    bulkSubcategories.value = val.slice(0, MAX_SUBCATEGORIES)
+  }
+})
+
+function openBulkEditCategory() {
+  bulkCategories.value = []
+  bulkSubcategories.value = []
+  bulkEditResultMessage.value = ''
+  bulkEditCategoryOpen.value = true
+}
+
+// adds the picked categories/subcategories alongside whatever each
+// selected item already has - never removes an existing link. Respects
+// the same 2-category/2-subcategory cap as the individual edit form:
+// an item already at the cap is left unchanged for that part rather than
+// evicting one of its existing links to make room.
+async function applyBulkCategory() {
+  if (bulkEditSubmitting.value) return // already in flight - ignore a second click
+  const ids = [...selectedIds.value]
+  const toAddCategories = bulkCategories.value
+  const toAddSubcategories = bulkSubcategories.value
+  if (ids.length === 0 || (toAddCategories.length === 0 && toAddSubcategories.length === 0)) return
+
+  bulkEditSubmitting.value = true
+  let cappedCount = 0
+  try {
+    for (const itemId of ids) {
+      const item = items.value?.find((it) => it.id === itemId)
+      if (!item) continue
+
+      const linkedIds = new Set(item.item_categories.map((ic) => ic.categories?.id))
+      let categoryCount = item.item_categories.filter((ic) => !ic.categories?.parent_id).length
+      let subcategoryCount = item.item_categories.filter((ic) => ic.categories?.parent_id).length
+      let primaryAssigned = item.item_categories.length > 0
+      let wasCapped = false
+
+      for (const cat of toAddCategories) {
+        if (linkedIds.has(cat.id)) continue
+        if (categoryCount >= MAX_CATEGORIES) {
+          wasCapped = true
+          continue
+        }
+        const isPrimary = !primaryAssigned
+        await supabase.from('item_categories').insert({ item_id: itemId, category_id: cat.id, is_primary: isPrimary })
+        if (isPrimary) primaryAssigned = true
+        categoryCount++
+        linkedIds.add(cat.id)
+      }
+      for (const sub of toAddSubcategories) {
+        if (linkedIds.has(sub.id)) continue
+        if (subcategoryCount >= MAX_SUBCATEGORIES) {
+          wasCapped = true
+          continue
+        }
+        const isPrimary = !primaryAssigned
+        await supabase.from('item_categories').insert({ item_id: itemId, category_id: sub.id, is_primary: isPrimary })
+        if (isPrimary) primaryAssigned = true
+        subcategoryCount++
+        linkedIds.add(sub.id)
+      }
+      if (wasCapped) cappedCount++
+    }
+  } finally {
+    bulkEditSubmitting.value = false
+  }
+
+  selectedIds.value.clear()
+  await refresh()
+
+  if (cappedCount > 0) {
+    bulkEditResultMessage.value = `Done, but ${cappedCount} item${cappedCount === 1 ? ' was' : 's were'} already at the category/subcategory limit and left unchanged for those.`
+  } else {
+    bulkEditCategoryOpen.value = false
+  }
+}
 </script>
 
 <template>
@@ -483,6 +617,13 @@ async function deleteItem(id: string) {
       placeholder="Search items"
       class="mb-4 w-full"
     />
+
+    <div v-if="selectedIds.size > 0" class="mb-4 flex items-center gap-2 rounded border border-default p-2">
+      <span class="text-sm">{{ selectedIds.size }} selected</span>
+      <UButton size="sm" variant="outline" @click="openBulkEditCategory">Edit category</UButton>
+      <UButton size="sm" variant="outline" color="error" :loading="bulkDeleting" @click="bulkDelete">Delete</UButton>
+      <UButton size="sm" variant="ghost" @click="clearSelection">Clear</UButton>
+    </div>
 
     <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
       <div>
@@ -522,7 +663,7 @@ async function deleteItem(id: string) {
         <UButton size="sm" variant="ghost" @click="expandAllGroups">Expand all</UButton>
         <UButton size="sm" variant="ghost" @click="collapseAllGroups">Collapse all</UButton>
       </div>
-      <div v-for="[groupName, groupItems] in groupedItems" :key="groupName" class="mb-4">
+      <div v-for="[groupName, groupItems] in displayGroups" :key="groupName" class="mb-4">
         <div class="mb-2 flex items-center justify-between gap-2">
           <button
             type="button"
@@ -561,33 +702,40 @@ async function deleteItem(id: string) {
             class="flex cursor-pointer items-center justify-between rounded border border-default px-3 py-2"
             @click="openEdit(item)"
           >
-            <div>
-              <span class="font-medium">{{ item.name }}</span>
-              <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
-              <UBadge
-                v-for="ic in item.item_categories"
-                :key="ic.categories!.id"
-                size="sm"
-                :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-                class="ml-2 cursor-pointer"
-                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-                @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
-              >
-                <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                {{ ic.categories!.name }}
-              </UBadge>
-              <UBadge
-                v-for="t in item.item_tags"
-                :key="t.tags!.id"
-                size="sm"
-                variant="outline"
-                class="ml-2 cursor-pointer"
-                :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-                @click.stop="setPrimaryTag(item.id, t.tags!.id)"
-              >
-                <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                {{ t.tags!.name }}
-              </UBadge>
+            <div class="flex items-center gap-2">
+              <UCheckbox
+                :model-value="selectedIds.has(item.id)"
+                @click.stop
+                @update:model-value="toggleSelected(item.id)"
+              />
+              <div>
+                <span class="font-medium">{{ item.name }}</span>
+                <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
+                <UBadge
+                  v-for="ic in item.item_categories"
+                  :key="ic.categories!.id"
+                  size="sm"
+                  :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                  class="ml-2 cursor-pointer"
+                  :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                  @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+                >
+                  <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+                  {{ ic.categories!.name }}
+                </UBadge>
+                <UBadge
+                  v-for="t in item.item_tags"
+                  :key="t.tags!.id"
+                  size="sm"
+                  variant="outline"
+                  class="ml-2 cursor-pointer"
+                  :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+                  @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+                >
+                  <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+                  {{ t.tags!.name }}
+                </UBadge>
+              </div>
             </div>
             <UButton
               size="sm"
@@ -609,33 +757,40 @@ async function deleteItem(id: string) {
         class="flex cursor-pointer items-center justify-between rounded border border-default px-3 py-2"
         @click="openEdit(item)"
       >
-        <div>
-          <span class="font-medium">{{ item.name }}</span>
-          <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
-          <UBadge
-            v-for="ic in item.item_categories"
-            :key="ic.categories!.id"
-            size="sm"
-            :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
-            class="ml-2 cursor-pointer"
-            :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-            @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
-          >
-            <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-            {{ ic.categories!.name }}
-          </UBadge>
-          <UBadge
-            v-for="t in item.item_tags"
-            :key="t.tags!.id"
-            size="sm"
-            variant="outline"
-            class="ml-2 cursor-pointer"
-            :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-            @click.stop="setPrimaryTag(item.id, t.tags!.id)"
-          >
-            <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-            {{ t.tags!.name }}
-          </UBadge>
+        <div class="flex items-center gap-2">
+          <UCheckbox
+            :model-value="selectedIds.has(item.id)"
+            @click.stop
+            @update:model-value="toggleSelected(item.id)"
+          />
+          <div>
+            <span class="font-medium">{{ item.name }}</span>
+            <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
+            <UBadge
+              v-for="ic in item.item_categories"
+              :key="ic.categories!.id"
+              size="sm"
+              :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+              class="ml-2 cursor-pointer"
+              :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+              @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+            >
+              <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+              {{ ic.categories!.name }}
+            </UBadge>
+            <UBadge
+              v-for="t in item.item_tags"
+              :key="t.tags!.id"
+              size="sm"
+              variant="outline"
+              class="ml-2 cursor-pointer"
+              :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+              @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+            >
+              <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+              {{ t.tags!.name }}
+            </UBadge>
+          </div>
         </div>
         <UButton
           size="sm"
@@ -764,6 +919,51 @@ async function deleteItem(id: string) {
             </UButton>
             <UButton variant="ghost" :disabled="quickAddBulkSubmitting" @click="quickAddBulkOpen = false">
               Cancel
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal v-model:open="bulkEditCategoryOpen" title="Edit category" :dismissible="!bulkEditSubmitting">
+      <template #body>
+        <div class="flex flex-col gap-3">
+          <p class="text-muted text-sm">
+            Applying to {{ selectedIds.size }} item{{ selectedIds.size === 1 ? '' : 's' }}. Categories are added
+            alongside each item's existing ones - nothing is removed.
+          </p>
+          <UFormField label="Categories" hint="Up to 2">
+            <UInputMenu
+              v-model="bulkCategories"
+              :items="topLevelCategoryOptions"
+              multiple
+              label-key="name"
+              :disabled="bulkEditSubmitting"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="Subcategories" hint="Up to 2">
+            <UInputMenu
+              v-model="bulkSubcategories"
+              :items="bulkSubcategoryOptions"
+              multiple
+              label-key="name"
+              placeholder="Pick a category first"
+              :disabled="bulkEditSubmitting"
+              class="w-full"
+            />
+          </UFormField>
+          <p v-if="bulkEditResultMessage" class="text-sm text-amber-600">{{ bulkEditResultMessage }}</p>
+          <div class="flex gap-2">
+            <UButton
+              :disabled="bulkCategories.length === 0 && bulkSubcategories.length === 0"
+              :loading="bulkEditSubmitting"
+              @click="applyBulkCategory"
+            >
+              Apply
+            </UButton>
+            <UButton variant="ghost" :disabled="bulkEditSubmitting" @click="bulkEditCategoryOpen = false">
+              {{ bulkEditResultMessage ? 'Done' : 'Cancel' }}
             </UButton>
           </div>
         </div>
