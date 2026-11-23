@@ -352,6 +352,10 @@ const amount = ref<number | null>(null)
 const unitId = ref<string | null>(null)
 const size = ref('')
 const itemNotes = ref('')
+// both start hidden; revealed via the "+ Size" link / notes icon button so
+// the add form stays one line in the common case, same affordance as edit
+const showAddSize = ref(false)
+const showAddNotes = ref(false)
 const error = ref('')
 const adding = ref(false)
 
@@ -442,6 +446,8 @@ async function addItem() {
   unitId.value = null
   size.value = ''
   itemNotes.value = ''
+  showAddSize.value = false
+  showAddNotes.value = false
   // force the item picker to remount: its internal search text doesn't
   // reliably clear just from setting the external v-model to null,
   // especially after the create-new-item path.
@@ -666,8 +672,69 @@ async function removeItem(id: string) {
   }
 }
 
-// --- edit item inline ---
+// --- bulk select / delete ---
+// bulkEditMode gates the whole feature: while on, the left checkbox/marker
+// slot on every ListItemRow is repurposed for selection instead of its
+// normal per-variant behavior (is_done toggle, or a bare marker)
+const bulkEditMode = ref(false)
+function toggleBulkEditMode() {
+  bulkEditMode.value = !bulkEditMode.value
+  if (!bulkEditMode.value) selectedItemIds.value.clear()
+}
 
+const selectedItemIds = ref<Set<string>>(new Set())
+function toggleItemSelected(id: string) {
+  if (selectedItemIds.value.has(id)) selectedItemIds.value.delete(id)
+  else selectedItemIds.value.add(id)
+}
+
+const allItemIds = computed(() => {
+  const ids: string[] = []
+  for (const parent of itemTree.value) {
+    ids.push(parent.id)
+    for (const child of parent.children) ids.push(child.id)
+  }
+  return ids
+})
+const allItemsSelected = computed(
+  () => allItemIds.value.length > 0 && allItemIds.value.every((id) => selectedItemIds.value.has(id)),
+)
+function toggleSelectAll() {
+  selectedItemIds.value = allItemsSelected.value ? new Set() : new Set(allItemIds.value)
+}
+
+const bulkDeletingItems = ref(false)
+async function bulkDeleteItems() {
+  if (bulkDeletingItems.value) return // already in flight - ignore a second click
+  const ids = [...selectedItemIds.value]
+  if (ids.length === 0) return
+
+  bulkDeletingItems.value = true
+  try {
+    const deletedAt = new Date().toISOString()
+    await supabase.from('list_items').update({ deleted_at: deletedAt }).in('id', ids)
+    // same cascade as removeItem() - a selected parent's children (even if
+    // not themselves selected) would otherwise be left dangling
+    await supabase.from('list_items').update({ deleted_at: deletedAt }).in('parent_id', ids).is('deleted_at', null)
+  } finally {
+    bulkDeletingItems.value = false
+  }
+
+  // splice in place (reverse order so earlier indices stay valid) - never
+  // reassign itemTree.value or a parent's children to a new array, same
+  // invariant every other mutation on this page already follows
+  for (let i = itemTree.value.length - 1; i >= 0; i--) {
+    if (selectedItemIds.value.has(itemTree.value[i]!.id)) itemTree.value.splice(i, 1)
+  }
+  for (const parent of itemTree.value) {
+    for (let j = parent.children.length - 1; j >= 0; j--) {
+      if (selectedItemIds.value.has(parent.children[j]!.id)) parent.children.splice(j, 1)
+    }
+  }
+  selectedItemIds.value.clear()
+}
+
+// --- edit item inline ---
 type EditDraft = {
   name: string
   isListOnly: boolean
@@ -787,7 +854,7 @@ async function deleteList() {
           class="mb-2 w-full"
           @blur="saveListField({ notes: notes || null })"
         />
-        <div class="mb-2 flex gap-2">
+        <div class="mb-2 flex flex-col gap-2 sm:flex-row">
           <UFormField label="Categories" hint="Up to 2 (optional)" class="flex-1">
             <UInputMenu
               v-model="selectedCategories"
@@ -837,9 +904,32 @@ async function deleteList() {
     </div>
 
     <template v-if="list.list_type !== 'note'">
-    <div v-if="list.list_type === 'checklist'" class="mb-4 flex gap-2">
-      <UButton size="sm" variant="ghost" @click="checkAll(true)">Check all</UButton>
-      <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
+    <div v-if="viewMode === 'edit'" class="mb-4 flex flex-wrap items-center gap-2">
+      <template v-if="list.list_type === 'checklist'">
+        <UButton size="sm" variant="ghost" @click="checkAll(true)">Check all</UButton>
+        <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
+      </template>
+
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <UButton size="sm" variant="outline" @click="toggleBulkEditMode">
+          {{ bulkEditMode ? 'Done selecting' : 'Select multiple' }}
+        </UButton>
+        <template v-if="bulkEditMode">
+          <UButton size="sm" variant="outline" @click="toggleSelectAll">
+            {{ allItemsSelected ? 'Unselect all' : 'Select all' }}
+          </UButton>
+          <UButton
+            size="sm"
+            variant="outline"
+            color="error"
+            :disabled="selectedItemIds.size === 0"
+            :loading="bulkDeletingItems"
+            @click="bulkDeleteItems"
+          >
+            Delete{{ selectedItemIds.size > 0 ? ` (${selectedItemIds.size})` : '' }}
+          </UButton>
+        </template>
+      </div>
     </div>
 
     <template v-if="list.list_type === 'checklist'">
@@ -863,18 +953,27 @@ async function deleteList() {
 
     <form
       v-if="viewMode === 'edit' && list.list_type === 'checklist'"
-      class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
+      class="mb-6 flex flex-col gap-2 rounded border border-default p-3 sm:flex-row sm:flex-wrap sm:items-start"
       @submit.prevent="addItem"
       @paste="onChecklistNamePaste"
     >
-      <ItemMasterListField
-        :key="itemPickerKey"
-        v-model:item="selectedItem"
-        v-model:add-to-master-list="addToMasterList"
-        :item-options="itemOptions"
-      />
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <UInputNumber v-model="amount" placeholder="Qty" :min="0" />
+      <div class="sm:min-w-48 sm:flex-1">
+        <ItemMasterListField
+          :key="itemPickerKey"
+          v-model:item="selectedItem"
+          v-model:add-to-master-list="addToMasterList"
+          :item-options="itemOptions"
+        />
+      </div>
+      <div class="flex flex-wrap items-center gap-1">
+        <UInputNumber
+          v-model="amount"
+          placeholder="0"
+          :min="0"
+          :increment="{ size: 'xs' }"
+          :decrement="{ size: 'xs' }"
+          class="w-24"
+        />
         <USelectMenu
           v-model="unitId"
           :items="unitOptionsForAmount"
@@ -882,12 +981,38 @@ async function deleteList() {
           label-key="label"
           :filter-fields="UNIT_FILTER_FIELDS"
           placeholder="Unit"
+          class="flex-1 sm:w-28 sm:flex-none"
         />
-        <UInput v-model="size" placeholder="Size" />
+        <UButton
+          v-if="!showAddSize && !size"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-ruler"
+          title="Add size"
+          @click="showAddSize = true"
+        />
+        <UButton
+          v-if="!showAddNotes && !itemNotes"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-notebook-pen"
+          title="Add notes"
+          @click="showAddNotes = true"
+        />
+        <UButton type="submit" :loading="adding">Add</UButton>
       </div>
-      <UInput v-model="itemNotes" placeholder="Notes (optional)" />
-      <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
-      <UButton type="submit" :loading="adding">Add item</UButton>
+
+      <div v-if="showAddSize || size || showAddNotes || itemNotes" class="flex w-full items-start gap-2">
+        <UInput
+          v-if="showAddSize || size"
+          v-model="size"
+          placeholder="Size"
+          :class="showAddNotes || itemNotes ? 'w-28 sm:w-40' : 'flex-1'"
+        />
+        <UInput v-if="showAddNotes || itemNotes" v-model="itemNotes" placeholder="Notes (optional)" class="flex-1" />
+      </div>
+
+      <p v-if="error" class="w-full text-sm text-red-500">{{ error }}</p>
     </form>
 
     <form
@@ -920,10 +1045,13 @@ async function deleteList() {
               :reorderable="viewMode === 'edit'"
               :editable="viewMode === 'edit'"
               :editing-id="editingItemId"
+              :bulk-edit-mode="bulkEditMode"
+              :selected="selectedItemIds.has(li.id)"
               v-model:draft="editDraft"
               :unit-options="list.list_type === 'checklist' ? (unitOptions ?? []) : []"
               :extra-edit-unit-option="list.list_type === 'checklist' ? extraEditUnitOption : null"
               @toggle-done="toggleDone(li.id, li.is_done)"
+              @toggle-select="toggleItemSelected(li.id)"
               @start-edit="startEdit(li)"
               @cancel-edit="cancelEdit"
               @save-edit="saveEdit(li.id)"
@@ -952,10 +1080,13 @@ async function deleteList() {
                     :reorderable="viewMode === 'edit'"
                     :editable="viewMode === 'edit'"
                     :editing-id="editingItemId"
+                    :bulk-edit-mode="bulkEditMode"
+                    :selected="selectedItemIds.has(child.id)"
                     v-model:draft="editDraft"
                     :unit-options="list.list_type === 'checklist' ? (unitOptions ?? []) : []"
                     :extra-edit-unit-option="list.list_type === 'checklist' ? extraEditUnitOption : null"
                     @toggle-done="toggleDone(child.id, child.is_done)"
+                    @toggle-select="toggleItemSelected(child.id)"
                     @start-edit="startEdit(child)"
                     @cancel-edit="cancelEdit"
                     @save-edit="saveEdit(child.id)"
@@ -984,10 +1115,13 @@ async function deleteList() {
               :reorderable="false"
               :editable="viewMode === 'edit'"
               :editing-id="editingItemId"
+              :bulk-edit-mode="bulkEditMode"
+              :selected="selectedItemIds.has(node.id)"
               v-model:draft="editDraft"
               :unit-options="unitOptions ?? []"
               :extra-edit-unit-option="extraEditUnitOption"
               @toggle-done="toggleDone(node.id, node.is_done)"
+              @toggle-select="toggleItemSelected(node.id)"
               @start-edit="startEdit(node)"
               @cancel-edit="cancelEdit"
               @save-edit="saveEdit(node.id)"
@@ -1005,10 +1139,13 @@ async function deleteList() {
                   :reorderable="false"
                   :editable="viewMode === 'edit'"
                   :editing-id="editingItemId"
+                  :bulk-edit-mode="bulkEditMode"
+                  :selected="selectedItemIds.has(child.id)"
                   v-model:draft="editDraft"
                   :unit-options="unitOptions ?? []"
                   :extra-edit-unit-option="extraEditUnitOption"
                   @toggle-done="toggleDone(child.id, child.is_done)"
+                  @toggle-select="toggleItemSelected(child.id)"
                   @start-edit="startEdit(child)"
                   @cancel-edit="cancelEdit"
                   @save-edit="saveEdit(child.id)"
@@ -1032,10 +1169,13 @@ async function deleteList() {
           :reorderable="false"
           :editable="viewMode === 'edit'"
           :editing-id="editingItemId"
+          :bulk-edit-mode="bulkEditMode"
+          :selected="selectedItemIds.has(node.id)"
           v-model:draft="editDraft"
           :unit-options="unitOptions ?? []"
           :extra-edit-unit-option="extraEditUnitOption"
           @toggle-done="toggleDone(node.id, node.is_done)"
+          @toggle-select="toggleItemSelected(node.id)"
           @start-edit="startEdit(node)"
           @cancel-edit="cancelEdit"
           @save-edit="saveEdit(node.id)"
@@ -1053,10 +1193,13 @@ async function deleteList() {
               :reorderable="false"
               :editable="viewMode === 'edit'"
               :editing-id="editingItemId"
+              :bulk-edit-mode="bulkEditMode"
+              :selected="selectedItemIds.has(child.id)"
               v-model:draft="editDraft"
               :unit-options="unitOptions ?? []"
               :extra-edit-unit-option="extraEditUnitOption"
               @toggle-done="toggleDone(child.id, child.is_done)"
+              @toggle-select="toggleItemSelected(child.id)"
               @start-edit="startEdit(child)"
               @cancel-edit="cancelEdit"
               @save-edit="saveEdit(child.id)"

@@ -49,6 +49,10 @@ const props = defineProps<{
   reorderable: boolean
   editable: boolean
   editingId: string | null
+  // while true, the left checkbox/marker slot (normally is_done for
+  // checklist, a bare marker for plain) is repurposed for bulk selection
+  bulkEditMode: boolean
+  selected: boolean
   unitOptions: UnitOption[]
   extraEditUnitOption: { id: string; name_singular: string; name_plural: string } | null
 }>()
@@ -64,6 +68,7 @@ const emit = defineEmits<{
   nest: []
   'switch-category': [categoryId: string]
   'switch-tag': [tagId: string]
+  'toggle-select': []
 }>()
 
 const isEditing = computed(() => props.editingId === props.item.id)
@@ -84,6 +89,13 @@ function sourcesLabel(sources: ItemRow['list_item_sources']) {
     .join(', ')
 }
 
+// size/notes stay hidden behind a toggle when editing an item that doesn't
+// already have one set, same as the add form - these don't need to reset
+// when editing ends since the v-if conditions already fall back to
+// draft.size/draft.notes being non-empty regardless of this ref's value
+const showEditSize = ref(false)
+const showEditNotes = ref(false)
+
 const editUnitOptionsForAmount = computed(() => {
   const label = (u: { name_singular: string; name_plural: string }) =>
     draft.value?.amount != null && draft.value.amount !== 1 ? u.name_plural : u.name_singular
@@ -98,12 +110,33 @@ const editUnitOptionsForAmount = computed(() => {
 
 <template>
   <div class="rounded border border-default px-3 py-2">
-    <div v-if="!isEditing" class="flex items-center justify-between">
-      <div class="flex flex-1 items-center gap-1">
-        <span v-if="variant === 'plain'" class="text-muted w-5 shrink-0 text-center">{{ marker }}</span>
+    <template v-if="!isEditing">
+    <div class="flex flex-wrap items-center justify-between gap-y-2">
+      <div class="flex min-w-0 flex-1 items-center gap-1">
+        <label v-if="bulkEditMode" class="flex flex-1 items-center gap-3">
+          <UCheckbox color="neutral" :model-value="selected" @update:model-value="emit('toggle-select')" />
+          <span :class="{ 'text-muted line-through': variant === 'checklist' && item.is_done }">
+            {{ item.name }}
+            <template v-if="variant === 'checklist'">
+              <span v-if="item.amount != null" class="text-muted text-sm">
+                {{ item.amount }}<span v-if="item.unit">{{ ' ' + unitLabel(item.unit, item.amount) }}</span>
+              </span>
+              <span v-if="item.size" class="text-muted text-sm">({{ item.size }})</span>
+              <span v-if="item.notes" class="text-muted block text-xs">{{ item.notes }}</span>
+              <span v-if="sourcesLabel(item.list_item_sources)" class="text-muted block text-xs">
+                {{ sourcesLabel(item.list_item_sources) }}
+              </span>
+            </template>
+          </span>
+        </label>
 
-        <label v-if="variant === 'checklist'" class="flex flex-1 items-center gap-3">
-          <UCheckbox :model-value="item.is_done" @update:model-value="emit('toggle-done')" />
+        <template v-else-if="variant === 'plain'">
+          <span class="text-muted w-5 shrink-0 text-center">{{ marker }}</span>
+          <span class="flex-1">{{ item.name }}</span>
+        </template>
+
+        <label v-else class="flex flex-1 items-center gap-3">
+          <UCheckbox color="primary" :model-value="item.is_done" @update:model-value="emit('toggle-done')" />
           <span :class="{ 'text-muted line-through': item.is_done }">
             {{ item.name }}
             <span v-if="item.amount != null" class="text-muted text-sm">
@@ -116,9 +149,8 @@ const editUnitOptionsForAmount = computed(() => {
             </span>
           </span>
         </label>
-        <span v-else class="flex-1">{{ item.name }}</span>
 
-        <template v-if="variant === 'checklist'">
+        <div v-if="variant === 'checklist'" class="hidden flex-wrap items-center gap-1 sm:flex">
           <UBadge
             v-for="ic in item.item?.item_categories ?? []"
             :key="ic.categories!.id"
@@ -143,9 +175,9 @@ const editUnitOptionsForAmount = computed(() => {
             <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
             {{ t.tags!.name }}
           </UBadge>
-        </template>
+        </div>
       </div>
-      <div class="flex shrink-0 items-center gap-1">
+      <div class="flex shrink-0 items-center">
         <UButton
           v-if="nestButton === 'indent'"
           size="sm"
@@ -174,11 +206,52 @@ const editUnitOptionsForAmount = computed(() => {
       </div>
     </div>
 
+    <!-- mobile only: badges drop to their own row below the name instead of
+         fighting the name/amount/unit text for space on narrow screens;
+         ml-7 lines them up under the name text, past the checkbox+gap-3 -->
+    <div
+      v-if="variant === 'checklist' && ((item.item?.item_categories.length ?? 0) > 0 || (item.item?.item_tags.length ?? 0) > 0)"
+      class="mt-1 ml-7 flex flex-wrap items-center gap-1 sm:hidden"
+    >
+      <UBadge
+        v-for="ic in item.item?.item_categories ?? []"
+        :key="ic.categories!.id"
+        size="xs"
+        :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+        class="cursor-pointer"
+        :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+        @click.stop="emit('switch-category', ic.categories!.id)"
+      >
+        <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+        {{ ic.categories!.name }}
+      </UBadge>
+      <UBadge
+        v-for="t in item.item?.item_tags ?? []"
+        :key="t.tags!.id"
+        size="xs"
+        variant="outline"
+        class="cursor-pointer"
+        :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+        @click.stop="emit('switch-tag', t.tags!.id)"
+      >
+        <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+        {{ t.tags!.name }}
+      </UBadge>
+    </div>
+    </template>
+
     <div v-else-if="draft" class="flex flex-col gap-2">
       <UInput v-if="variant === 'plain' || draft.isListOnly" v-model="draft.name" placeholder="Name" />
       <span v-else class="font-medium">{{ item.name }}</span>
-      <div v-if="variant === 'checklist'" class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <UInputNumber v-model="draft.amount" placeholder="Qty" :min="0" />
+      <div v-if="variant === 'checklist'" class="flex flex-wrap items-center gap-1">
+        <UInputNumber
+          v-model="draft.amount"
+          placeholder="Qty"
+          :min="0"
+          :increment="{ size: 'xs' }"
+          :decrement="{ size: 'xs' }"
+          class="w-24"
+        />
         <USelectMenu
           v-model="draft.unitId"
           :items="editUnitOptionsForAmount"
@@ -186,10 +259,37 @@ const editUnitOptionsForAmount = computed(() => {
           label-key="label"
           :filter-fields="UNIT_FILTER_FIELDS"
           placeholder="Unit"
+          class="flex-1"
         />
-        <UInput v-model="draft.size" placeholder="Size" />
+        <UButton
+          v-if="!showEditSize && !draft.size"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-ruler"
+          title="Add size"
+          @click="showEditSize = true"
+        />
+        <UButton
+          v-if="!showEditNotes && !draft.notes"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-notebook-pen"
+          title="Add notes"
+          @click="showEditNotes = true"
+        />
       </div>
-      <UInput v-if="variant === 'checklist'" v-model="draft.notes" placeholder="Notes (optional)" />
+      <div
+        v-if="variant === 'checklist' && (showEditSize || draft.size || showEditNotes || draft.notes)"
+        class="flex w-full items-start gap-2"
+      >
+        <UInput
+          v-if="showEditSize || draft.size"
+          v-model="draft.size"
+          placeholder="Size"
+          :class="showEditNotes || draft.notes ? 'w-28 sm:w-40' : 'flex-1'"
+        />
+        <UInput v-if="showEditNotes || draft.notes" v-model="draft.notes" placeholder="Notes (optional)" class="flex-1" />
+      </div>
       <div class="flex gap-2">
         <UButton size="sm" @click="emit('save-edit')">Save</UButton>
         <UButton size="sm" variant="ghost" @click="emit('cancel-edit')">Cancel</UButton>

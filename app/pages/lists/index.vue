@@ -64,6 +64,15 @@ const LIST_TYPE_LABELS: Record<string, string> = {
   note: 'Note',
 }
 
+// success/info are the same green/blue as primary/secondary by default in
+// this app's theme, so pick 4 visually distinct tokens instead
+const LIST_TYPE_COLORS: Record<string, 'primary' | 'secondary' | 'warning' | 'neutral'> = {
+  checklist: 'primary',
+  bullet: 'secondary',
+  numbered: 'warning',
+  note: 'neutral',
+}
+
 const filteredLists = computed(() => {
   let list = (lists.value ?? []).filter((l) => l.status === statusFilter.value && matchesTypeTab(l.list_type))
   if (filterCategories.value.length > 0) {
@@ -260,7 +269,7 @@ async function deleteList(id: string) {
           <UIcon name="i-lucide-grip-vertical" class="drag-handle mr-2 shrink-0 cursor-grab text-muted" />
           <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
             <span class="font-medium">{{ list.name }}</span>
-            <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+            <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" :color="LIST_TYPE_COLORS[list.list_type]" class="ml-2">
               {{ LIST_TYPE_LABELS[list.list_type] }}
             </UBadge>
             <UBadge
@@ -317,7 +326,7 @@ async function deleteList(id: string) {
           >
             <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
               <span class="font-medium">{{ list.name }}</span>
-              <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+              <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" :color="LIST_TYPE_COLORS[list.list_type]" class="ml-2">
                 {{ LIST_TYPE_LABELS[list.list_type] }}
               </UBadge>
               <UBadge
@@ -370,7 +379,7 @@ async function deleteList(id: string) {
       >
         <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
           <span class="font-medium">{{ list.name }}</span>
-          <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+          <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" :color="LIST_TYPE_COLORS[list.list_type]" class="ml-2">
             {{ LIST_TYPE_LABELS[list.list_type] }}
           </UBadge>
           <UBadge

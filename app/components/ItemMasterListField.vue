@@ -43,7 +43,7 @@ function clear() {
 
 <template>
   <div class="flex flex-col gap-1">
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <UInputMenu
         v-model="item"
         v-model:open="itemPickerOpen"
@@ -66,7 +66,13 @@ function clear() {
         label="Update saved item"
         class="shrink-0"
       />
-      <UCheckbox v-else v-model="confirmAction" label="Add to master list" class="shrink-0" />
+      <UCheckbox
+        v-else
+        v-model="confirmAction"
+        label="Add to master list"
+        class="shrink-0 items-center sm:max-w-24"
+        :ui="{ base: 'sm:size-3', icon: 'sm:size-2.5', container: 'sm:h-4', wrapper: 'sm:text-xs' }"
+      />
     </div>
     <p v-if="isEditingExistingLink && !(item && item.id) && !confirmAction" class="text-muted text-xs">
       Only applies to this entry, not the shared item.
