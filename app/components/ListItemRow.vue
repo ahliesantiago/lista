@@ -100,27 +100,6 @@ const editUnitOptionsForAmount = computed(() => {
   <div class="rounded border border-default px-3 py-2">
     <div v-if="!isEditing" class="flex items-center justify-between">
       <div class="flex flex-1 items-center gap-1">
-        <UIcon
-          v-if="reorderable"
-          name="i-lucide-grip-vertical"
-          class="drag-handle text-muted shrink-0 cursor-grab"
-        />
-        <UButton
-          v-if="nestButton === 'indent'"
-          size="sm"
-          variant="ghost"
-          icon="i-lucide-chevron-right"
-          title="Nest under previous item"
-          @click="emit('nest')"
-        />
-        <UButton
-          v-if="nestButton === 'outdent'"
-          size="sm"
-          variant="ghost"
-          icon="i-lucide-chevron-left"
-          title="Move to top level"
-          @click="emit('nest')"
-        />
         <span v-if="variant === 'plain'" class="text-muted w-5 shrink-0 text-center">{{ marker }}</span>
 
         <label v-if="variant === 'checklist'" class="flex flex-1 items-center gap-3">
@@ -166,9 +145,32 @@ const editUnitOptionsForAmount = computed(() => {
           </UBadge>
         </template>
       </div>
-      <div v-if="editable" class="flex items-center gap-1">
-        <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="emit('start-edit')" />
-        <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="emit('remove')" />
+      <div class="flex shrink-0 items-center gap-1">
+        <UButton
+          v-if="nestButton === 'indent'"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-chevron-right"
+          title="Nest under previous item"
+          @click="emit('nest')"
+        />
+        <UButton
+          v-if="nestButton === 'outdent'"
+          size="sm"
+          variant="ghost"
+          icon="i-lucide-chevron-left"
+          title="Move to top level"
+          @click="emit('nest')"
+        />
+        <template v-if="editable">
+          <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="emit('start-edit')" />
+          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="emit('remove')" />
+        </template>
+        <UIcon
+          v-if="reorderable"
+          name="i-lucide-grip-vertical"
+          class="drag-handle text-muted shrink-0 cursor-grab"
+        />
       </div>
     </div>
 
