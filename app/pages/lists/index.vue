@@ -43,16 +43,25 @@ const filterCategories = ref<CategoryOption[]>([])
 const filterTags = ref<Option[]>([])
 
 // "List" groups bullet/unordered + numbered lists together
-type TypeTab = 'list' | 'checklist' | 'note'
+type TypeTab = 'all' | 'list' | 'checklist' | 'note'
 const typeTabs: { value: TypeTab; label: string }[] = [
+  { value: 'all', label: 'All' },
   { value: 'checklist', label: 'Checklist' },
   { value: 'list', label: 'List' },
   { value: 'note', label: 'Note' },
 ]
-const typeTab = ref<TypeTab>('checklist')
+const typeTab = ref<TypeTab>('all')
 function matchesTypeTab(listType: string) {
+  if (typeTab.value === 'all') return true
   if (typeTab.value === 'list') return listType === 'bullet' || listType === 'numbered'
   return listType === typeTab.value
+}
+
+const LIST_TYPE_LABELS: Record<string, string> = {
+  checklist: 'Checklist',
+  bullet: 'Bullet list',
+  numbered: 'Numbered list',
+  note: 'Note',
 }
 
 const filteredLists = computed(() => {
@@ -251,6 +260,9 @@ async function deleteList(id: string) {
           <UIcon name="i-lucide-grip-vertical" class="drag-handle mr-2 shrink-0 cursor-grab text-muted" />
           <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
             <span class="font-medium">{{ list.name }}</span>
+            <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+              {{ LIST_TYPE_LABELS[list.list_type] }}
+            </UBadge>
             <UBadge
               v-for="lc in list.list_categories"
               :key="lc.categories!.id"
@@ -305,6 +317,9 @@ async function deleteList(id: string) {
           >
             <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
               <span class="font-medium">{{ list.name }}</span>
+              <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+                {{ LIST_TYPE_LABELS[list.list_type] }}
+              </UBadge>
               <UBadge
                 v-for="lc in list.list_categories"
                 :key="lc.categories!.id"
@@ -355,6 +370,9 @@ async function deleteList(id: string) {
       >
         <NuxtLink :to="`/lists/${list.id}`" class="flex-1">
           <span class="font-medium">{{ list.name }}</span>
+          <UBadge v-if="typeTab === 'all'" size="sm" variant="subtle" color="primary" class="ml-2">
+            {{ LIST_TYPE_LABELS[list.list_type] }}
+          </UBadge>
           <UBadge
             v-for="lc in list.list_categories"
             :key="lc.categories!.id"
