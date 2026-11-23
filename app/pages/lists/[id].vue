@@ -487,6 +487,144 @@ async function addPlainItem() {
   plainItemName.value = ''
 }
 
+// --- paste a chunk of text to create multiple items at once ---
+function splitPastedLines(text: string): string[] {
+  return text
+    .split(/\r\n|\r|\n/)
+    .map((line) => line.trim().replace(/^(?:[-*•◦]|\d+[.)]|[a-zA-Z][.)])\s+/, '').trim())
+    .filter((line) => line.length > 0)
+}
+
+async function addPlainItems(lines: string[]) {
+  const baseIndex = itemTree.value.length
+  const { data: newRows, error: insertError } = await supabase
+    .from('list_items')
+    .insert(lines.map((itemName, i) => ({ list_id: listId, item_id: null, name: itemName, parent_id: null, sort_order: baseIndex + i })))
+    .select('id')
+
+  if (insertError || !newRows) {
+    error.value = insertError?.message ?? 'Failed to add items'
+    return
+  }
+
+  newRows.forEach((newRow, i) => {
+    itemTree.value.push({
+      id: newRow.id,
+      name: lines[i]!,
+      amount: null,
+      size: null,
+      notes: null,
+      is_done: false,
+      item_id: null,
+      parent_id: null,
+      sort_order: baseIndex + i,
+      unit: null,
+      list_item_sources: [],
+      item: null,
+      children: [],
+    })
+  })
+}
+
+function onPlainNamePaste(event: ClipboardEvent) {
+  const lines = splitPastedLines(event.clipboardData?.getData('text/plain') ?? '')
+  if (lines.length < 2) return // a single-line paste behaves exactly as before
+  event.preventDefault()
+  addPlainItems(lines)
+}
+
+type BulkDraftRow = { name: string; addToMasterList: boolean }
+const bulkReviewOpen = ref(false)
+const bulkDraftRows = ref<BulkDraftRow[]>([])
+
+function matchFor(itemName: string) {
+  const term = itemName.trim().toLowerCase()
+  return itemOptions.value.find((o) => o.name.toLowerCase() === term) ?? null
+}
+
+function onChecklistNamePaste(event: ClipboardEvent) {
+  const lines = splitPastedLines(event.clipboardData?.getData('text/plain') ?? '')
+  if (lines.length < 2) return
+  event.preventDefault()
+  bulkDraftRows.value = lines.map((itemName) => ({ name: itemName, addToMasterList: true }))
+  bulkReviewOpen.value = true
+}
+
+// mirrors addItem()'s resolveItem() usage, but resolved live per-row
+// against the current itemOptions rather than a single picked-or-typed value
+async function submitBulkReview() {
+  const rows = bulkDraftRows.value.filter((r) => r.name.trim())
+  if (rows.length === 0) {
+    bulkReviewOpen.value = false
+    return
+  }
+
+  const resolved: { name: string; itemId: string | null }[] = []
+  for (const row of rows) {
+    const rowName = row.name.trim()
+    const match = matchFor(rowName)
+    if (match) {
+      resolved.push({ name: match.name, itemId: match.id })
+      continue
+    }
+    if (row.addToMasterList && space.value) {
+      const { data } = await supabase
+        .from('items')
+        .insert({ space_id: space.value.id, name: capitalizeFirst(rowName) })
+        .select('id, name')
+        .single()
+      if (data) {
+        itemOptions.value.push({ id: data.id, name: data.name, item_categories: [], item_tags: [] })
+        resolved.push({ name: data.name, itemId: data.id })
+        continue
+      }
+    }
+    resolved.push({ name: rowName, itemId: null })
+  }
+
+  const baseIndex = itemTree.value.length
+  const { data: newRows, error: insertError } = await supabase
+    .from('list_items')
+    .insert(
+      resolved.map((r, i) => ({
+        list_id: listId,
+        item_id: r.itemId,
+        name: r.name,
+        parent_id: null,
+        sort_order: baseIndex + i,
+      })),
+    )
+    .select('id')
+
+  if (insertError || !newRows) {
+    error.value = insertError?.message ?? 'Failed to add items'
+    return
+  }
+
+  newRows.forEach((newRow, i) => {
+    const r = resolved[i]!
+    const optionMatch = r.itemId ? itemOptions.value.find((o) => o.id === r.itemId) : null
+    itemTree.value.push({
+      id: newRow.id,
+      name: r.name,
+      amount: null,
+      size: null,
+      notes: null,
+      is_done: false,
+      item_id: r.itemId,
+      parent_id: null,
+      sort_order: baseIndex + i,
+      unit: null,
+      list_item_sources: [],
+      item: { item_categories: optionMatch?.item_categories ?? [], item_tags: optionMatch?.item_tags ?? [] },
+      children: [],
+    })
+  })
+
+  bulkReviewOpen.value = false
+  bulkDraftRows.value = []
+}
+
 async function toggleDone(id: string, isDone: boolean) {
   await supabase.from('list_items').update({ is_done: !isDone }).eq('id', id)
   const found = findItem(id)
@@ -723,6 +861,7 @@ async function deleteList() {
       v-if="viewMode === 'edit' && list.list_type === 'checklist'"
       class="mb-6 flex flex-col gap-2 rounded border border-default p-3"
       @submit.prevent="addItem"
+      @paste="onChecklistNamePaste"
     >
       <ItemMasterListField
         :key="itemPickerKey"
@@ -751,6 +890,7 @@ async function deleteList() {
       v-if="viewMode === 'edit' && list.list_type !== 'checklist'"
       class="mb-6 flex gap-2"
       @submit.prevent="addPlainItem"
+      @paste="onPlainNamePaste"
     >
       <UInput v-model="plainItemName" placeholder="New item" class="flex-1" />
       <UButton type="submit" :loading="adding">Add</UButton>
@@ -926,5 +1066,25 @@ async function deleteList() {
     </ul>
     <p v-if="itemTree.length === 0" class="text-muted text-sm">No items yet.</p>
     </template>
+
+    <UModal v-model:open="bulkReviewOpen" title="Review pasted items">
+      <template #body>
+        <div class="flex flex-col gap-2">
+          <div v-for="(row, i) in bulkDraftRows" :key="i" class="flex items-center gap-2">
+            <UInput v-model="row.name" class="flex-1" />
+            <UBadge v-if="matchFor(row.name)" color="success" variant="subtle">In master list</UBadge>
+            <UCheckbox v-else v-model="row.addToMasterList" label="Add to master list" />
+            <UButton size="sm" variant="ghost" icon="i-lucide-x" @click="bulkDraftRows.splice(i, 1)" />
+          </div>
+          <p v-if="bulkDraftRows.length === 0" class="text-muted text-sm">No items left to add.</p>
+          <div class="mt-2 flex gap-2">
+            <UButton :disabled="bulkDraftRows.length === 0" @click="submitBulkReview">
+              Add {{ bulkDraftRows.length }} item{{ bulkDraftRows.length === 1 ? '' : 's' }}
+            </UButton>
+            <UButton variant="ghost" @click="bulkReviewOpen = false">Cancel</UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
