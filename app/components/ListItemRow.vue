@@ -21,7 +21,11 @@ type ItemRow = {
     recipe: { name: string } | null
   }[]
   item: {
-    item_categories: { is_primary: boolean; categories: { id: string; name: string; parent_id: string | null } | null }[]
+    item_categories: {
+      is_primary: boolean
+      is_primary_subcategory: boolean
+      categories: { id: string; name: string; parent_id: string | null } | null
+    }[]
     item_tags: { is_primary: boolean; tags: { id: string; name: string } | null }[]
   } | null
 }
@@ -67,11 +71,15 @@ const emit = defineEmits<{
   remove: []
   nest: []
   'switch-category': [categoryId: string]
+  'switch-subcategory': [categoryId: string]
   'switch-tag': [tagId: string]
   'toggle-select': []
 }>()
 
 const isEditing = computed(() => props.editingId === props.item.id)
+
+const mainCategories = computed(() => props.item.item?.item_categories.filter((ic) => !ic.categories?.parent_id) ?? [])
+const subcategories = computed(() => props.item.item?.item_categories.filter((ic) => ic.categories?.parent_id) ?? [])
 
 function unitLabel(unit: { name_singular: string; name_plural: string } | null, amount: number | null) {
   if (!unit) return ''
@@ -152,10 +160,11 @@ const editUnitOptionsForAmount = computed(() => {
 
         <div v-if="variant === 'checklist'" class="hidden flex-wrap items-center gap-1 sm:flex">
           <UBadge
-            v-for="ic in item.item?.item_categories ?? []"
+            v-for="ic in mainCategories"
             :key="ic.categories!.id"
             size="sm"
-            :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+            color="primary"
+            variant="solid"
             class="cursor-pointer"
             :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
             @click.stop="emit('switch-category', ic.categories!.id)"
@@ -164,9 +173,25 @@ const editUnitOptionsForAmount = computed(() => {
             {{ ic.categories!.name }}
           </UBadge>
           <UBadge
+            v-for="ic in subcategories"
+            :key="ic.categories!.id"
+            size="sm"
+            color="warning"
+            variant="subtle"
+            class="cursor-pointer"
+            :title="
+              ic.is_primary_subcategory ? 'Primary subcategory (used for grouping)' : 'Click to make this the primary subcategory'
+            "
+            @click.stop="emit('switch-subcategory', ic.categories!.id)"
+          >
+            <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
+            {{ ic.categories!.name }}
+          </UBadge>
+          <UBadge
             v-for="t in item.item?.item_tags ?? []"
             :key="t.tags!.id"
             size="sm"
+            color="neutral"
             variant="outline"
             class="cursor-pointer"
             :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
@@ -214,10 +239,11 @@ const editUnitOptionsForAmount = computed(() => {
       class="mt-1 ml-7 flex flex-wrap items-center gap-1 sm:hidden"
     >
       <UBadge
-        v-for="ic in item.item?.item_categories ?? []"
+        v-for="ic in mainCategories"
         :key="ic.categories!.id"
         size="xs"
-        :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+        color="primary"
+        variant="solid"
         class="cursor-pointer"
         :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
         @click.stop="emit('switch-category', ic.categories!.id)"
@@ -226,9 +252,25 @@ const editUnitOptionsForAmount = computed(() => {
         {{ ic.categories!.name }}
       </UBadge>
       <UBadge
+        v-for="ic in subcategories"
+        :key="ic.categories!.id"
+        size="xs"
+        color="warning"
+        variant="subtle"
+        class="cursor-pointer"
+        :title="
+          ic.is_primary_subcategory ? 'Primary subcategory (used for grouping)' : 'Click to make this the primary subcategory'
+        "
+        @click.stop="emit('switch-subcategory', ic.categories!.id)"
+      >
+        <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
+        {{ ic.categories!.name }}
+      </UBadge>
+      <UBadge
         v-for="t in item.item?.item_tags ?? []"
         :key="t.tags!.id"
         size="xs"
+        color="neutral"
         variant="outline"
         class="cursor-pointer"
         :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"

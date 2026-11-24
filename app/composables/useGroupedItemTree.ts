@@ -1,9 +1,13 @@
 export type TreeSortBy = 'custom' | 'name-asc'
-export type TreeGroupBy = 'none' | 'category' | 'tag'
+export type TreeGroupBy = 'none' | 'category' | 'category_subcategory' | 'tag'
 
 type Classified = {
   item: {
-    item_categories: { categories: { name: string } | null; is_primary: boolean }[]
+    item_categories: {
+      categories: { name: string; parent_id: string | null } | null
+      is_primary: boolean
+      is_primary_subcategory: boolean
+    }[]
     item_tags: { tags: { name: string } | null; is_primary: boolean }[]
   } | null
 }
@@ -12,7 +16,7 @@ export function useGroupedItemTree<
   TChild extends { id: string; name: string; is_done: boolean },
   TNode extends TChild & Classified & { children: TChild[] },
 >(itemTree: Ref<TNode[]>, sortBy: Ref<TreeSortBy>, groupBy: Ref<TreeGroupBy>, moveDoneToBottom: Ref<boolean>) {
-  const { primaryCategoryKeys, primaryTagKeys } = useItemCategorization()
+  const { primaryCategoryKeys, categoryAndSubcategoryKeys, primaryTagKeys } = useItemCategorization()
 
   function orderNodes<T extends { name: string; is_done: boolean }>(nodes: T[]): T[] {
     const ordered = sortBy.value === 'name-asc' ? [...nodes].sort((a, b) => a.name.localeCompare(b.name)) : nodes
@@ -22,6 +26,7 @@ export function useGroupedItemTree<
 
   function groupKeys(node: TNode): string[] {
     if (groupBy.value === 'category') return primaryCategoryKeys(node.item?.item_categories ?? [])
+    if (groupBy.value === 'category_subcategory') return categoryAndSubcategoryKeys(node.item?.item_categories ?? [])
     if (groupBy.value === 'tag') return primaryTagKeys(node.item?.item_tags ?? [])
     return []
   }

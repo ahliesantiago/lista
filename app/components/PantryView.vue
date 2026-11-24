@@ -42,7 +42,7 @@ const { data: inventoryItems, refresh } = await useAsyncData(`inventory-items-${
       id, stock_status, quantity, notes,
       inventory_item_locations(storage_location:storage_locations(id, name, room:rooms(id, name))),
       inventory_item_rooms(room:rooms(id, name)),
-      item:items(id, name, item_categories(is_primary, categories(id, name, parent_id))),
+      item:items(id, name, item_categories(is_primary, is_primary_subcategory, categories(id, name, parent_id))),
       unit:units(id, name_singular, name_plural)
     `)
     .eq('kind', props.kind)
@@ -148,10 +148,24 @@ const filteredInventoryItems = computed(() => {
   return list
 })
 
-const { setPrimaryCategory: setPrimaryCategoryLink, primaryCategoryKeys } = useItemCategorization()
+const {
+  setPrimaryCategory: setPrimaryCategoryLink,
+  setPrimarySubcategory: setPrimarySubcategoryLink,
+  primaryCategoryKeys,
+  categoryAndSubcategoryKeys,
+  parentCategoryNameFor,
+} = useItemCategorization()
 async function setPrimaryCategory(itemId: string, categoryId: string) {
   await setPrimaryCategoryLink(itemId, categoryId)
   await refresh()
+}
+async function setPrimarySubcategory(itemId: string, categoryId: string) {
+  await setPrimarySubcategoryLink(itemId, categoryId)
+  await refresh()
+}
+function groupParentName(groupName: string): string | null {
+  if (groupBy.value !== 'category_subcategory') return null
+  return parentCategoryNameFor(categoryOptions.value ?? [], groupName)
 }
 
 const {
@@ -173,6 +187,10 @@ const {
     category: {
       label: 'Category',
       getKeys: (p) => primaryCategoryKeys(p.item!.item_categories),
+    },
+    category_subcategory: {
+      label: 'Category & Subcategory',
+      getKeys: (p) => categoryAndSubcategoryKeys(p.item!.item_categories),
     },
     'stock-status': {
       label: 'Stock status',
@@ -441,15 +459,33 @@ async function save() {
               <div class="flex-1 cursor-pointer" @click="openEdit(p)">
                 <span class="font-medium">{{ p.item!.name }}</span>
                 <UBadge
-                  v-for="ic in p.item!.item_categories"
+                  v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
                   :key="ic.categories!.id"
                   size="sm"
-                  :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                  color="primary"
+                  variant="solid"
                   class="ml-2 cursor-pointer"
                   :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
                   @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
                 >
                   <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+                  {{ ic.categories!.name }}
+                </UBadge>
+                <UBadge
+                  v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
+                  :key="ic.categories!.id"
+                  size="sm"
+                  color="warning"
+                  variant="subtle"
+                  class="ml-2 cursor-pointer"
+                  :title="
+                    ic.is_primary_subcategory
+                      ? 'Primary subcategory (used for grouping)'
+                      : 'Click to make this the primary subcategory'
+                  "
+                  @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+                >
+                  <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
                   {{ ic.categories!.name }}
                 </UBadge>
                 <UBadge
@@ -512,7 +548,15 @@ async function save() {
 
     <template v-else-if="groupBy !== 'none'">
       <div v-for="[groupName, groupItems] in groupedByCategoryOrStock ?? []" :key="groupName" class="mb-6">
-        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
+        <p v-if="groupParentName(groupName)" class="text-muted text-xs leading-tight">
+          {{ groupParentName(groupName) }}
+        </p>
+        <h2
+          class="mb-2 font-semibold text-muted"
+          :class="groupParentName(groupName) ? 'border-default border-l-2 pl-2 text-sm' : 'text-base'"
+        >
+          {{ groupName }}
+        </h2>
         <ul class="flex flex-col gap-2">
           <li
             v-for="p in groupItems"
@@ -522,15 +566,33 @@ async function save() {
             <div class="flex-1 cursor-pointer" @click="openEdit(p)">
               <span class="font-medium">{{ p.item!.name }}</span>
               <UBadge
-                v-for="ic in p.item!.item_categories"
+                v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
                 :key="ic.categories!.id"
                 size="sm"
-                :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                color="primary"
+                variant="solid"
                 class="ml-2 cursor-pointer"
                 :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
                 @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
               >
                 <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+                {{ ic.categories!.name }}
+              </UBadge>
+              <UBadge
+                v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
+                :key="ic.categories!.id"
+                size="sm"
+                color="warning"
+                variant="subtle"
+                class="ml-2 cursor-pointer"
+                :title="
+                  ic.is_primary_subcategory
+                    ? 'Primary subcategory (used for grouping)'
+                    : 'Click to make this the primary subcategory'
+                "
+                @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+              >
+                <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
                 {{ ic.categories!.name }}
               </UBadge>
               <UBadge
@@ -600,15 +662,33 @@ async function save() {
           <div class="flex-1 cursor-pointer" @click="openEdit(p)">
             <span class="font-medium">{{ p.item!.name }}</span>
             <UBadge
-              v-for="ic in p.item!.item_categories"
+              v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
               :key="ic.categories!.id"
               size="sm"
-              :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+              color="primary"
+              variant="solid"
               class="ml-2 cursor-pointer"
               :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
               @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
             >
               <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
+              {{ ic.categories!.name }}
+            </UBadge>
+            <UBadge
+              v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
+              :key="ic.categories!.id"
+              size="sm"
+              color="warning"
+              variant="subtle"
+              class="ml-2 cursor-pointer"
+              :title="
+                ic.is_primary_subcategory
+                  ? 'Primary subcategory (used for grouping)'
+                  : 'Click to make this the primary subcategory'
+              "
+              @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+            >
+              <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
               {{ ic.categories!.name }}
             </UBadge>
             <UBadge

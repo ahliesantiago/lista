@@ -20,7 +20,7 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
     .from('items')
     .select(`
       id, name, plural_name, price, notes,
-      item_categories(is_primary, categories(id, name, parent_id)),
+      item_categories(is_primary, is_primary_subcategory, categories(id, name, parent_id)),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
       item_tags(is_primary, tags(id, name)),
       item_units(units(id, name_singular, name_plural, abbrev_singular, abbrev_plural))
@@ -91,14 +91,21 @@ const filteredItems = computed(() => {
 
 const {
   setPrimaryCategory: setPrimaryCategoryLink,
+  setPrimarySubcategory: setPrimarySubcategoryLink,
   setPrimaryTag: setPrimaryTagLink,
   primaryCategoryKeys,
+  categoryAndSubcategoryKeys,
+  parentCategoryNameFor,
   primaryTagKeys,
   syncPrimaryLinks,
 } = useItemCategorization()
 
 async function setPrimaryCategory(itemId: string, categoryId: string) {
   await setPrimaryCategoryLink(itemId, categoryId)
+  await refresh()
+}
+async function setPrimarySubcategory(itemId: string, categoryId: string) {
+  await setPrimarySubcategoryLink(itemId, categoryId)
   await refresh()
 }
 async function setPrimaryTag(itemId: string, tagId: string) {
@@ -122,6 +129,10 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } 
       label: 'Category',
       getKeys: (item) => primaryCategoryKeys(item.item_categories),
     },
+    category_subcategory: {
+      label: 'Category & Subcategory',
+      getKeys: (item) => categoryAndSubcategoryKeys(item.item_categories),
+    },
     tag: {
       label: 'Tag',
       getKeys: (item) => primaryTagKeys(item.item_tags),
@@ -135,6 +146,17 @@ groupBy.value = 'category'
 // quick-add to know which category/tag a given group heading maps to
 const categoryIdByName = computed(() => new Map((categoryOptions.value ?? []).map((c) => [c.name, c.id])))
 const tagIdByName = computed(() => new Map(tagOptions.value.map((t) => [t.name, t.id])))
+function isSubcategoryId(categoryId: string) {
+  return !!categoryOptions.value?.find((c) => c.id === categoryId)?.parent_id
+}
+function parentCategoryIdFor(categoryId: string): string | null {
+  return categoryOptions.value?.find((c) => c.id === categoryId)?.parent_id ?? null
+}
+
+function groupParentName(groupName: string): string | null {
+  if (groupBy.value !== 'category_subcategory') return null
+  return parentCategoryNameFor(categoryOptions.value ?? [], groupName)
+}
 
 // Pin "Uncategorized" to the end of the list of groups
 const displayGroups = computed(() => {
@@ -185,13 +207,20 @@ async function submitQuickAdd(groupName: string) {
       .select('id')
       .single()
     if (insertError || !data) return
-    if (groupBy.value === 'category') {
+    if (groupBy.value === 'category' || groupBy.value === 'category_subcategory') {
       const categoryId = categoryIdByName.value.get(groupName)
-      // this is the first (and only) category this item has - it must be
-      // primary, or it'd fall straight back into "Uncategorized" despite
-      // being quick-added into a named group
+      // this is the first (and only) category/subcategory this item has -
+      // it must be primary, or it'd fall straight back into "Uncategorized"
+      // despite being quick-added into a named group
       if (categoryId) {
-        await supabase.from('item_categories').insert({ item_id: data.id, category_id: categoryId, is_primary: true })
+        const isSubcategory = isSubcategoryId(categoryId)
+        const rows = [
+          { item_id: data.id, category_id: categoryId, is_primary: !isSubcategory, is_primary_subcategory: isSubcategory },
+        ]
+        // when quick adding to a subcategory, link its parent too as the primary category
+        const parentId = isSubcategory ? parentCategoryIdFor(categoryId) : null
+        if (parentId) rows.push({ item_id: data.id, category_id: parentId, is_primary: true, is_primary_subcategory: false })
+        await supabase.from('item_categories').insert(rows)
       }
     } else if (groupBy.value === 'tag') {
       const tagId = tagIdByName.value.get(groupName)
@@ -256,18 +285,38 @@ async function submitQuickAddBulkReview() {
         itemId = data.id
       }
 
-      if (groupBy.value === 'category') {
+      if (groupBy.value === 'category' || groupBy.value === 'category_subcategory') {
         const categoryId = categoryIdByName.value.get(groupName)
         if (!categoryId) continue
         const alreadyLinked = existing?.item_categories.some((ic) => ic.categories?.id === categoryId)
         if (alreadyLinked) continue
-        // only becomes primary if this is the item's first category - bulk-
-        // adding an already-categorized item into another group shouldn't
-        // silently steal its existing primary grouping
-        const isFirstCategory = !existing || existing.item_categories.length === 0
-        await supabase
-          .from('item_categories')
-          .insert({ item_id: itemId, category_id: categoryId, is_primary: isFirstCategory })
+        const isSubcategory = isSubcategoryId(categoryId)
+        // only becomes primary if this is the item's first category/subcategory
+        // at that level - bulk-adding an already-categorized item into
+        // another group shouldn't silently steal its existing primary grouping
+        const existingOfSameLevel = existing?.item_categories.filter((ic) =>
+          isSubcategory ? !!ic.categories?.parent_id : !ic.categories?.parent_id,
+        )
+        const isFirstOfLevel = !existingOfSameLevel || existingOfSameLevel.length === 0
+        const rows = [
+          {
+            item_id: itemId,
+            category_id: categoryId,
+            is_primary: !isSubcategory && isFirstOfLevel,
+            is_primary_subcategory: isSubcategory && isFirstOfLevel,
+          },
+        ]
+        // when quick adding to a subcategory, link its parent too (unless already linked),
+        // as the primary category if this item doesn't have one yet
+        if (isSubcategory) {
+          const parentId = parentCategoryIdFor(categoryId)
+          const parentAlreadyLinked = existing?.item_categories.some((ic) => ic.categories?.id === parentId)
+          if (parentId && !parentAlreadyLinked) {
+            const hasMainCategory = existing?.item_categories.some((ic) => !ic.categories?.parent_id) ?? false
+            rows.push({ item_id: itemId, category_id: parentId, is_primary: !hasMainCategory, is_primary_subcategory: false })
+          }
+        }
+        await supabase.from('item_categories').insert(rows)
       } else if (groupBy.value === 'tag') {
         const tagId = tagIdByName.value.get(groupName)
         if (!tagId) continue
@@ -365,7 +414,7 @@ const { onCreateCategoryOption, onCreateSubcategoryOption } = useCategoryCreatio
 // selectedTags (which only ever hold plain {id,name} option objects) so
 // is_primary doesn't leak into the UInputMenu chip/create-item flow - these
 // exist purely so save() has the "before" state to diff against
-const originalCategoryLinks = ref<{ id: string; is_primary: boolean }[]>([])
+const originalCategoryLinks = ref<{ id: string; parentId: string | null; is_primary: boolean }[]>([])
 const originalTagLinks = ref<{ id: string; is_primary: boolean }[]>([])
 
 function resetForm() {
@@ -408,7 +457,11 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   extraDefaultUnitOption.value = item.default_unit ?? null
   selectedUnits.value = item.item_units.map((iu) => iu.units!)
   selectedTags.value = item.item_tags.map((it) => ({ id: it.tags!.id, name: it.tags!.name }))
-  originalCategoryLinks.value = item.item_categories.map((ic) => ({ id: ic.categories!.id, is_primary: ic.is_primary }))
+  originalCategoryLinks.value = item.item_categories.map((ic) => ({
+    id: ic.categories!.id,
+    parentId: ic.categories!.parent_id,
+    is_primary: ic.categories!.parent_id ? ic.is_primary_subcategory : ic.is_primary,
+  }))
   originalTagLinks.value = item.item_tags.map((it) => ({ id: it.tags!.id, is_primary: it.is_primary }))
   error.value = ''
   slideoverOpen.value = true
@@ -465,8 +518,17 @@ async function save() {
     await supabase.from('item_units').insert(selectedUnits.value.map((u) => ({ item_id: itemId, unit_id: u.id })))
   }
 
-  const allCategoryIds = [...selectedCategories.value, ...selectedSubcategories.value].map((c) => c.id)
-  await syncPrimaryLinks('item_categories', 'category_id', itemId, originalCategoryLinks.value, allCategoryIds)
+  const prevMainLinks = originalCategoryLinks.value.filter((l) => !l.parentId)
+  const prevSubLinks = originalCategoryLinks.value.filter((l) => l.parentId)
+  await syncPrimaryLinks('item_categories', 'category_id', itemId, prevMainLinks, selectedCategories.value.map((c) => c.id))
+  await syncPrimaryLinks(
+    'item_categories',
+    'category_id',
+    itemId,
+    prevSubLinks,
+    selectedSubcategories.value.map((c) => c.id),
+    'is_primary_subcategory',
+  )
   await syncPrimaryLinks('item_tags', 'tag_id', itemId, originalTagLinks.value, selectedTags.value.map((t) => t.id))
 
   saving.value = false
@@ -562,7 +624,8 @@ async function applyBulkCategory() {
       const linkedIds = new Set(item.item_categories.map((ic) => ic.categories?.id))
       let categoryCount = item.item_categories.filter((ic) => !ic.categories?.parent_id).length
       let subcategoryCount = item.item_categories.filter((ic) => ic.categories?.parent_id).length
-      let primaryAssigned = item.item_categories.length > 0
+      let mainPrimaryAssigned = categoryCount > 0
+      let subPrimaryAssigned = subcategoryCount > 0
       let wasCapped = false
 
       for (const cat of toAddCategories) {
@@ -571,9 +634,9 @@ async function applyBulkCategory() {
           wasCapped = true
           continue
         }
-        const isPrimary = !primaryAssigned
+        const isPrimary = !mainPrimaryAssigned
         await supabase.from('item_categories').insert({ item_id: itemId, category_id: cat.id, is_primary: isPrimary })
-        if (isPrimary) primaryAssigned = true
+        if (isPrimary) mainPrimaryAssigned = true
         categoryCount++
         linkedIds.add(cat.id)
       }
@@ -583,9 +646,11 @@ async function applyBulkCategory() {
           wasCapped = true
           continue
         }
-        const isPrimary = !primaryAssigned
-        await supabase.from('item_categories').insert({ item_id: itemId, category_id: sub.id, is_primary: isPrimary })
-        if (isPrimary) primaryAssigned = true
+        const isPrimary = !subPrimaryAssigned
+        await supabase
+          .from('item_categories')
+          .insert({ item_id: itemId, category_id: sub.id, is_primary_subcategory: isPrimary })
+        if (isPrimary) subPrimaryAssigned = true
         subcategoryCount++
         linkedIds.add(sub.id)
       }
@@ -678,10 +743,20 @@ async function applyBulkCategory() {
               :name="isGroupExpanded(groupName) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
               class="size-4 text-muted"
             />
-            <h2 class="text-sm font-semibold text-muted">{{ groupName }}</h2>
+            <div>
+              <p v-if="groupParentName(groupName)" class="text-muted text-xs leading-tight">
+                {{ groupParentName(groupName) }}
+              </p>
+              <h2
+                class="font-semibold text-muted"
+                :class="groupParentName(groupName) ? 'border-default border-l-2 pl-2 text-sm' : 'text-base'"
+              >
+                {{ groupName }}
+              </h2>
+            </div>
           </button>
           <UButton
-            v-if="groupBy === 'category' || groupBy === 'tag'"
+            v-if="groupBy === 'category' || groupBy === 'category_subcategory' || groupBy === 'tag'"
             size="sm"
             variant="ghost"
             icon="i-lucide-plus"
@@ -716,10 +791,11 @@ async function applyBulkCategory() {
                 <span class="font-medium">{{ item.name }}</span>
                 <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
                 <UBadge
-                  v-for="ic in item.item_categories"
+                  v-for="ic in item.item_categories.filter((c) => !c.categories?.parent_id)"
                   :key="ic.categories!.id"
                   size="sm"
-                  :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+                  color="primary"
+                  variant="solid"
                   class="ml-2 cursor-pointer"
                   :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
                   @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
@@ -728,9 +804,27 @@ async function applyBulkCategory() {
                   {{ ic.categories!.name }}
                 </UBadge>
                 <UBadge
+                  v-for="ic in item.item_categories.filter((c) => c.categories?.parent_id)"
+                  :key="ic.categories!.id"
+                  size="sm"
+                  color="warning"
+                  variant="subtle"
+                  class="ml-2 cursor-pointer"
+                  :title="
+                    ic.is_primary_subcategory
+                      ? 'Primary subcategory (used for grouping)'
+                      : 'Click to make this the primary subcategory'
+                  "
+                  @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+                >
+                  <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
+                  {{ ic.categories!.name }}
+                </UBadge>
+                <UBadge
                   v-for="t in item.item_tags"
                   :key="t.tags!.id"
                   size="sm"
+                  color="neutral"
                   variant="outline"
                   class="ml-2 cursor-pointer"
                   :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
@@ -772,10 +866,11 @@ async function applyBulkCategory() {
             <span class="font-medium">{{ item.name }}</span>
             <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
             <UBadge
-              v-for="ic in item.item_categories"
+              v-for="ic in item.item_categories.filter((c) => !c.categories?.parent_id)"
               :key="ic.categories!.id"
               size="sm"
-              :variant="ic.categories!.parent_id ? 'subtle' : 'solid'"
+              color="primary"
+              variant="solid"
               class="ml-2 cursor-pointer"
               :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
               @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
@@ -784,9 +879,27 @@ async function applyBulkCategory() {
               {{ ic.categories!.name }}
             </UBadge>
             <UBadge
+              v-for="ic in item.item_categories.filter((c) => c.categories?.parent_id)"
+              :key="ic.categories!.id"
+              size="sm"
+              color="warning"
+              variant="subtle"
+              class="ml-2 cursor-pointer"
+              :title="
+                ic.is_primary_subcategory
+                  ? 'Primary subcategory (used for grouping)'
+                  : 'Click to make this the primary subcategory'
+              "
+              @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+            >
+              <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
+              {{ ic.categories!.name }}
+            </UBadge>
+            <UBadge
               v-for="t in item.item_tags"
               :key="t.tags!.id"
               size="sm"
+              color="neutral"
               variant="outline"
               class="ml-2 cursor-pointer"
               :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
