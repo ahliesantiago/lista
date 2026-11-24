@@ -631,6 +631,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          notes: string | null
           plural_name: string | null
           price: number | null
           space_id: string
@@ -643,6 +644,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          notes?: string | null
           plural_name?: string | null
           price?: number | null
           space_id: string
@@ -655,6 +657,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          notes?: string | null
           plural_name?: string | null
           price?: number | null
           space_id?: string
@@ -1281,6 +1284,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          notes: string | null
           space_id: string
         }
         Insert: {
@@ -1289,6 +1293,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          notes?: string | null
           space_id: string
         }
         Update: {
@@ -1297,6 +1302,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          notes?: string | null
           space_id?: string
         }
         Relationships: [
@@ -1369,6 +1375,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          notes: string | null
           room_id: string | null
           space_id: string
         }
@@ -1378,6 +1385,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          notes?: string | null
           room_id?: string | null
           space_id: string
         }
@@ -1387,6 +1395,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          notes?: string | null
           room_id?: string | null
           space_id?: string
         }

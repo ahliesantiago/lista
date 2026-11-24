@@ -19,7 +19,7 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
   const { data, error } = await supabase
     .from('items')
     .select(`
-      id, name, plural_name, price,
+      id, name, plural_name, price, notes,
       item_categories(is_primary, categories(id, name, parent_id)),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
       item_tags(is_primary, tags(id, name)),
@@ -307,6 +307,7 @@ onUnmounted(() => {
 const name = ref('')
 const pluralName = ref('')
 const price = ref<number | null>(null)
+const notes = ref('')
 const selectedCategories = ref<CategoryOption[]>([])
 const selectedSubcategories = ref<CategoryOption[]>([])
 const defaultUnitId = ref<string | null>(null)
@@ -372,6 +373,7 @@ function resetForm() {
   name.value = ''
   pluralName.value = ''
   price.value = null
+  notes.value = ''
   selectedCategories.value = []
   selectedSubcategories.value = []
   defaultUnitId.value = null
@@ -398,6 +400,7 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   name.value = item.name
   pluralName.value = item.plural_name ?? ''
   price.value = item.price
+  notes.value = item.notes ?? ''
   const linkedCategories = item.item_categories.map((ic) => ic.categories!)
   selectedCategories.value = linkedCategories.filter((c) => !c.parent_id)
   selectedSubcategories.value = linkedCategories.filter((c) => c.parent_id)
@@ -436,6 +439,7 @@ async function save() {
     plural_name: pluralName.value.trim() || null,
     default_unit_id: defaultUnitId.value,
     price: price.value,
+    notes: notes.value.trim() || null,
   }
 
   let itemId = editingId.value
@@ -735,6 +739,7 @@ async function applyBulkCategory() {
                   <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
                   {{ t.tags!.name }}
                 </UBadge>
+                <p v-if="item.notes" class="text-muted mt-1 text-sm">{{ item.notes }}</p>
               </div>
             </div>
             <UButton
@@ -790,6 +795,7 @@ async function applyBulkCategory() {
               <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
               {{ t.tags!.name }}
             </UBadge>
+            <p v-if="item.notes" class="text-muted mt-1 text-sm">{{ item.notes }}</p>
           </div>
         </div>
         <UButton
@@ -841,6 +847,10 @@ async function applyBulkCategory() {
 
           <UFormField label="Price" hint="Optional">
             <UInputNumber v-model="price" :min="0" class="w-full" />
+          </UFormField>
+
+          <UFormField label="Notes" hint="Optional">
+            <UInput v-model="notes" placeholder="Notes" class="w-full" />
           </UFormField>
 
           <UFormField label="Default Unit" hint="Optional">

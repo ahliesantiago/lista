@@ -7,7 +7,7 @@ const { data: space } = await useCurrentSpace()
 const { data: locations, refresh } = await useAsyncData('storage-locations', async () => {
   const { data, error } = await supabase
     .from('storage_locations')
-    .select('id, name, room:rooms(id, name)')
+    .select('id, name, notes, room:rooms(id, name)')
     .is('deleted_at', null)
     .order('name')
   if (error) throw error
@@ -61,6 +61,7 @@ async function onCreateRoomOptionForEdit(searchTerm: string) {
 
 const newName = ref('')
 const newRoom = ref<RoomOption | null>(null)
+const newNotes = ref('')
 const error = ref('')
 const saving = ref(false)
 
@@ -72,6 +73,7 @@ async function addLocation() {
     space_id: space.value.id,
     name: newName.value.trim(),
     room_id: newRoom.value?.id ?? null,
+    notes: newNotes.value.trim() || null,
   })
   saving.value = false
   if (insertError) {
@@ -80,6 +82,7 @@ async function addLocation() {
   }
   newName.value = ''
   newRoom.value = null
+  newNotes.value = ''
   await refresh()
 }
 
@@ -109,11 +112,13 @@ async function deleteLocation(id: string) {
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const editRoom = ref<RoomOption | null>(null)
+const editNotes = ref('')
 
 function startEdit(location: Location) {
   editingId.value = location.id
   editName.value = location.name
   editRoom.value = location.room ? { id: location.room.id, name: location.room.name } : null
+  editNotes.value = location.notes ?? ''
 }
 
 function cancelEdit() {
@@ -123,7 +128,11 @@ function cancelEdit() {
 async function saveEdit(id: string) {
   await supabase
     .from('storage_locations')
-    .update({ name: editName.value.trim(), room_id: editRoom.value?.id ?? null })
+    .update({
+      name: editName.value.trim(),
+      room_id: editRoom.value?.id ?? null,
+      notes: editNotes.value.trim() || null,
+    })
     .eq('id', id)
   editingId.value = null
   await refresh()
@@ -137,18 +146,21 @@ async function saveEdit(id: string) {
       <UButton to="/rooms" variant="outline" size="sm">Manage rooms</UButton>
     </div>
 
-    <form class="mb-6 flex flex-col gap-2 sm:flex-row" @submit.prevent="addLocation">
-      <UInput v-model="newName" placeholder="Location (e.g. Fridge)" required class="flex-1" />
-      <UInputMenu
-        v-model="newRoom"
-        :items="roomOptions"
-        create-item
-        label-key="name"
-        placeholder="Room (optional)"
-        class="flex-1"
-        @create="onCreateRoomOptionForAdd"
-      />
-      <UButton type="submit" :loading="saving">Add</UButton>
+    <form class="mb-6 flex flex-col gap-2" @submit.prevent="addLocation">
+      <div class="flex flex-col gap-2 sm:flex-row">
+        <UInput v-model="newName" placeholder="Location (e.g. Fridge)" required class="flex-1" />
+        <UInputMenu
+          v-model="newRoom"
+          :items="roomOptions"
+          create-item
+          label-key="name"
+          placeholder="Room (optional)"
+          class="flex-1"
+          @create="onCreateRoomOptionForAdd"
+        />
+        <UButton type="submit" :loading="saving">Add</UButton>
+      </div>
+      <UInput v-model="newNotes" placeholder="Notes (optional)" />
     </form>
 
     <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>
@@ -158,7 +170,10 @@ async function saveEdit(id: string) {
       <ul class="flex flex-col gap-2">
         <li v-for="location in group.locations" :key="location.id" class="rounded border border-default px-3 py-2">
           <div v-if="editingId !== location.id" class="flex items-center justify-between">
-            <span>{{ location.name }}</span>
+            <div>
+              <span>{{ location.name }}</span>
+              <p v-if="location.notes" class="text-muted mt-1 text-sm">{{ location.notes }}</p>
+            </div>
             <div class="flex gap-1">
               <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(location)" />
               <UButton
@@ -170,17 +185,20 @@ async function saveEdit(id: string) {
               />
             </div>
           </div>
-          <div v-else class="flex flex-col gap-2 sm:flex-row">
-            <UInput v-model="editName" placeholder="Location" class="flex-1" />
-            <UInputMenu
-              v-model="editRoom"
-              :items="roomOptions"
-              create-item
-              label-key="name"
-              placeholder="Room (optional)"
-              class="flex-1"
-              @create="onCreateRoomOptionForEdit"
-            />
+          <div v-else class="flex flex-col gap-2">
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <UInput v-model="editName" placeholder="Location" class="flex-1" />
+              <UInputMenu
+                v-model="editRoom"
+                :items="roomOptions"
+                create-item
+                label-key="name"
+                placeholder="Room (optional)"
+                class="flex-1"
+                @create="onCreateRoomOptionForEdit"
+              />
+            </div>
+            <UInput v-model="editNotes" placeholder="Notes (optional)" />
             <div class="flex gap-1">
               <UButton size="sm" @click="saveEdit(location.id)">Save</UButton>
               <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
