@@ -687,7 +687,10 @@ async function applyBulkCategory() {
       class="mb-4 w-full"
     />
 
-    <div v-if="selectedIds.size > 0" class="mb-4 flex items-center gap-2 rounded border border-default p-2">
+    <div
+      v-if="selectedIds.size > 0"
+      class="sticky top-0 z-10 mb-4 flex items-center gap-2 rounded border border-default bg-default p-2 shadow-sm"
+    >
       <span class="text-sm">{{ selectedIds.size }} selected</span>
       <UButton size="sm" variant="outline" @click="openBulkEditCategory">Edit category</UButton>
       <UButton size="sm" variant="outline" color="error" :loading="bulkDeleting" @click="bulkDelete">Delete</UButton>

@@ -932,7 +932,11 @@ async function deleteList() {
     </div>
 
     <template v-if="list.list_type !== 'note'">
-    <div v-if="viewMode === 'edit'" class="mb-4 flex flex-wrap items-center gap-2">
+    <div
+      v-if="viewMode === 'edit'"
+      class="mb-4 flex flex-wrap items-center gap-2"
+      :class="bulkEditMode ? 'sticky top-0 z-10 bg-default py-2' : ''"
+    >
       <template v-if="list.list_type === 'checklist'">
         <UButton size="sm" variant="ghost" @click="checkAll(true)">Check all</UButton>
         <UButton size="sm" variant="ghost" @click="checkAll(false)">Uncheck all</UButton>
