@@ -44,7 +44,7 @@ function clear() {
 <template>
   <div class="flex flex-col gap-1">
     <div class="flex flex-wrap items-center gap-2">
-      <UInputMenu
+      <AutoCloseInputMenu
         v-model="item"
         v-model:open="itemPickerOpen"
         v-model:search-term="searchTerm"

@@ -424,7 +424,7 @@ async function save() {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by category</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterCategories"
           :items="categoryOptions ?? []"
           multiple
@@ -435,7 +435,7 @@ async function save() {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by stock status</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterStockStatuses"
           :items="STOCK_STATUS_LABELS"
           multiple
@@ -534,7 +534,7 @@ async function save() {
               <div class="flex flex-wrap items-center gap-1" @click.stop>
                 <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
                 <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
-                <UInputMenu
+                <AutoCloseInputMenu
                   :model-value="addListSelection[p.id] ?? null"
                   :items="activeLists ?? []"
                 label-key="name"
@@ -653,7 +653,7 @@ async function save() {
             <div class="flex flex-wrap items-center gap-1" @click.stop>
               <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
               <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
-              <UInputMenu
+              <AutoCloseInputMenu
                 :model-value="addListSelection[p.id] ?? null"
                 :items="activeLists ?? []"
                 label-key="name"
@@ -761,7 +761,7 @@ async function save() {
           <div class="flex flex-wrap items-center gap-1" @click.stop>
             <UButton size="xs" variant="ghost" icon="i-lucide-minus" @click="bumpQuantity(p, -1)" />
             <UButton size="xs" variant="ghost" icon="i-lucide-plus" @click="bumpQuantity(p, 1)" />
-            <UInputMenu
+            <AutoCloseInputMenu
               :model-value="addListSelection[p.id] ?? null"
               :items="activeLists ?? []"
               label-key="name"
@@ -787,7 +787,7 @@ async function save() {
       <template #body>
         <form class="flex flex-col gap-4" @submit.prevent="save">
           <UFormField label="Item">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedItem"
               :items="itemOptions"
               create-item
@@ -800,7 +800,7 @@ async function save() {
 
           <div class="flex flex-col gap-2">
             <UFormField label="Locations" hint="Up to 2 (optional)">
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="selectedLocations"
                 :items="locationOptionsForPicker"
                 multiple
@@ -809,7 +809,7 @@ async function save() {
               />
             </UFormField>
             <UFormField label="Rooms" hint="Up to 2 (optional)">
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="selectedRooms"
                 :items="roomOptions ?? []"
                 multiple
@@ -828,7 +828,7 @@ async function save() {
               <UInputNumber v-model="quantity" :min="0" class="w-full" />
             </UFormField>
             <UFormField label="Unit" hint="Optional" class="flex-1">
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="unitId"
                 :items="unitOptionsForForm"
                 value-key="id"

@@ -239,7 +239,7 @@ async function saveEdit(id: string) {
         <UInput v-model="newNotes" placeholder="Notes (optional)" class="col-span-2" />
       </div>
       <div class="flex flex-col gap-2">
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="newLocations"
           :items="locationOptionsForPicker"
           multiple
@@ -247,7 +247,7 @@ async function saveEdit(id: string) {
           placeholder="Locations (up to 2, optional)"
           class="w-full"
         />
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="newRooms"
           :items="roomOptions ?? []"
           multiple
@@ -272,7 +272,7 @@ async function saveEdit(id: string) {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by location</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterLocations"
           :items="locationOptionsForPicker"
           multiple
@@ -283,7 +283,7 @@ async function saveEdit(id: string) {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by room</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterRooms"
           :items="roomOptions ?? []"
           multiple
@@ -354,7 +354,7 @@ async function saveEdit(id: string) {
                 <UInput v-model="editNotes" placeholder="Notes (optional)" class="col-span-2" />
               </div>
               <div class="flex flex-col gap-2">
-                <UInputMenu
+                <AutoCloseInputMenu
                   v-model="editLocations"
                   :items="locationOptionsForPicker"
                   multiple
@@ -362,7 +362,7 @@ async function saveEdit(id: string) {
                   placeholder="Locations (up to 2)"
                   class="w-full"
                 />
-                <UInputMenu
+                <AutoCloseInputMenu
                   v-model="editRooms"
                   :items="roomOptions ?? []"
                   multiple
@@ -439,7 +439,7 @@ async function saveEdit(id: string) {
             <UInput v-model="editNotes" placeholder="Notes (optional)" class="col-span-2" />
           </div>
           <div class="flex flex-col gap-2">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="editLocations"
               :items="locationOptionsForPicker"
               multiple
@@ -447,7 +447,7 @@ async function saveEdit(id: string) {
               placeholder="Locations (up to 2)"
               class="w-full"
             />
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="editRooms"
               :items="roomOptions ?? []"
               multiple

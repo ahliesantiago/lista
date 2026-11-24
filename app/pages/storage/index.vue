@@ -149,7 +149,7 @@ async function saveEdit(id: string) {
     <form class="mb-6 flex flex-col gap-2" @submit.prevent="addLocation">
       <div class="flex flex-col gap-2 sm:flex-row">
         <UInput v-model="newName" placeholder="Location (e.g. Fridge)" required class="flex-1" />
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="newRoom"
           :items="roomOptions"
           create-item
@@ -188,7 +188,7 @@ async function saveEdit(id: string) {
           <div v-else class="flex flex-col gap-2">
             <div class="flex flex-col gap-2 sm:flex-row">
               <UInput v-model="editName" placeholder="Location" class="flex-1" />
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="editRoom"
                 :items="roomOptions"
                 create-item

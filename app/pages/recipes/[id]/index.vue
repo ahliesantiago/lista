@@ -754,7 +754,7 @@ async function saveEditStep(id: string) {
         </div>
         <div class="mb-2 flex gap-2">
           <UFormField label="Categories" hint="Up to 2 (optional)" class="flex-1">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
@@ -765,7 +765,7 @@ async function saveEditStep(id: string) {
             />
           </UFormField>
           <UFormField label="Subcategories" hint="Up to 2 (optional)" class="flex-1">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
@@ -778,7 +778,7 @@ async function saveEditStep(id: string) {
           </UFormField>
         </div>
         <UFormField label="Tags" hint="Optional" class="mb-2">
-          <UInputMenu
+          <AutoCloseInputMenu
             v-model="recipeTags"
             :items="tagOptions"
             multiple
@@ -789,7 +789,7 @@ async function saveEditStep(id: string) {
           />
         </UFormField>
         <UFormField label="Cooking Equipment" hint="Optional">
-          <UInputMenu
+          <AutoCloseInputMenu
             v-model="recipeEquipment"
             :items="equipmentOptions"
             multiple
@@ -830,7 +830,7 @@ async function saveEditStep(id: string) {
           <UButton size="sm" variant="outline">Add to list</UButton>
           <template #content>
             <div class="flex w-56 flex-col gap-2 p-3">
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="listPicker"
                 :items="activeLists ?? []"
                 create-item
@@ -898,7 +898,7 @@ async function saveEditStep(id: string) {
             <UInput v-model="editIngredientName" placeholder="Item name" />
             <div class="grid grid-cols-2 gap-2">
               <UInputNumber v-model="editIngredientQuantity" placeholder="Qty" :min="0" />
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="editIngredientUnitId"
                 :items="unitOptions ?? []"
                 value-key="id"
@@ -908,7 +908,7 @@ async function saveEditStep(id: string) {
               />
             </div>
             <UInput v-model="editIngredientNote" placeholder="Note (optional)" />
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="editIngredientAlternatives"
               :items="itemOptions"
               multiple
@@ -934,7 +934,7 @@ async function saveEditStep(id: string) {
       <RecipeItemField v-model:item="ingredientItem" :item-options="itemOptions" />
       <div class="grid grid-cols-2 gap-2">
         <UInputNumber v-model="ingredientQuantity" placeholder="Qty" :min="0" />
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="ingredientUnitId"
           :items="unitOptions ?? []"
           value-key="id"
@@ -944,7 +944,7 @@ async function saveEditStep(id: string) {
         />
       </div>
       <UInput v-model="ingredientNote" placeholder="Note (optional)" />
-      <UInputMenu
+      <AutoCloseInputMenu
         v-model="ingredientAlternatives"
         :items="itemOptions"
         multiple

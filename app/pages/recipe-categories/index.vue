@@ -94,7 +94,7 @@ async function saveEdit(id: string) {
         <UInput v-model="newName" placeholder="New category" required class="flex-1" />
         <UButton type="submit" :loading="saving">Add</UButton>
       </div>
-      <UInputMenu
+      <AutoCloseInputMenu
         v-model="newParentId"
         :items="topLevelCategories"
         value-key="id"
@@ -124,7 +124,7 @@ async function saveEdit(id: string) {
           </div>
           <div v-else class="flex flex-col gap-2">
             <UInput v-model="editName" />
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="editParentId"
               :items="topLevelCategories.filter((c) => c.id !== category.id)"
               value-key="id"
@@ -157,7 +157,7 @@ async function saveEdit(id: string) {
           </div>
           <div v-else class="flex flex-col gap-2">
             <UInput v-model="editName" />
-            <UInputMenu v-model="editParentId" :items="topLevelCategories" value-key="id" label-key="name" />
+            <AutoCloseInputMenu v-model="editParentId" :items="topLevelCategories" value-key="id" label-key="name" />
             <div class="flex gap-1">
               <UButton size="sm" @click="saveEdit(sub.id)">Save</UButton>
               <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
@@ -191,7 +191,7 @@ async function saveEdit(id: string) {
           </div>
           <div v-else class="flex flex-col gap-2">
             <UInput v-model="editName" />
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="editParentId"
               :items="topLevelCategories"
               value-key="id"

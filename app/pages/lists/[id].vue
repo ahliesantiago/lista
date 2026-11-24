@@ -389,6 +389,10 @@ const itemPickerKey = ref(0)
 const addToMasterList = ref(true)
 const amount = ref<number | null>(null)
 const unitId = ref<string | null>(null)
+// single-select dropdowns normally close on their own after a pick, but
+// this one doesn't reliably (its :items recomputes on every amount change,
+// which seems to confuse the combobox's own open-state tracking) - force it
+const unitOpen = ref(false)
 const size = ref('')
 const itemNotes = ref('')
 // both start hidden; revealed via the "+ Size" link / notes icon button so
@@ -895,7 +899,7 @@ async function deleteList() {
         />
         <div class="mb-2 flex flex-col gap-2 sm:flex-row">
           <UFormField label="Categories" hint="Up to 2 (optional)" class="flex-1">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
@@ -906,7 +910,7 @@ async function deleteList() {
             />
           </UFormField>
           <UFormField label="Subcategories" hint="Up to 2 (optional)" class="flex-1">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
@@ -919,7 +923,7 @@ async function deleteList() {
           </UFormField>
         </div>
         <UFormField label="Tags" hint="Optional">
-          <UInputMenu
+          <AutoCloseInputMenu
             v-model="listTags"
             :items="tagOptions"
             multiple
@@ -1019,12 +1023,14 @@ async function deleteList() {
         />
         <USelectMenu
           v-model="unitId"
+          v-model:open="unitOpen"
           :items="unitOptionsForAmount"
           value-key="id"
           label-key="label"
           :filter-fields="UNIT_FILTER_FIELDS"
           placeholder="Unit"
           class="flex-1 sm:w-28 sm:flex-none"
+          @update:model-value="unitOpen = false"
         />
         <UButton
           v-if="!showAddSize && !size"

@@ -139,7 +139,7 @@ const { sortBy, groupBy, sortOptions, groupOptions, sortedItems, groupedItems } 
     },
   },
 )
-groupBy.value = 'category'
+groupBy.value = 'category_subcategory'
 
 // group buckets are keyed by name (not id) - categories/tags are unique
 // per space by name, so this is an unambiguous name->id lookup for
@@ -712,7 +712,7 @@ async function applyBulkCategory() {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by category</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterCategories"
           :items="categoryOptions ?? []"
           multiple
@@ -723,7 +723,7 @@ async function applyBulkCategory() {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by tag</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterTags"
           :items="tagOptions"
           multiple
@@ -963,7 +963,7 @@ async function applyBulkCategory() {
           </UFormField>
 
           <UFormField label="Categories" hint="Optional, up to 2">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedCategories"
               :items="topLevelCategoryOptions"
               multiple
@@ -975,7 +975,7 @@ async function applyBulkCategory() {
           </UFormField>
 
           <UFormField label="Subcategories" hint="Optional, up to 2">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedSubcategories"
               :items="subcategoryOptions"
               multiple
@@ -999,7 +999,7 @@ async function applyBulkCategory() {
 
           <UFormField label="Default Unit" hint="Optional">
             <div class="flex items-center gap-2">
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="defaultUnitId"
                 :items="defaultUnitOptionsForForm"
                 value-key="id"
@@ -1018,7 +1018,7 @@ async function applyBulkCategory() {
           </UFormField>
 
           <UFormField label="Allowed Units" hint="Optional">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedUnits"
               :items="unitOptions ?? []"
               multiple
@@ -1029,7 +1029,7 @@ async function applyBulkCategory() {
           </UFormField>
 
           <UFormField label="Tags" hint="Optional">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="selectedTags"
               :items="tagOptions"
               multiple
@@ -1087,7 +1087,7 @@ async function applyBulkCategory() {
             alongside each item's existing ones - nothing is removed.
           </p>
           <UFormField label="Categories" hint="Up to 2">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="bulkCategories"
               :items="topLevelCategoryOptions"
               multiple
@@ -1097,7 +1097,7 @@ async function applyBulkCategory() {
             />
           </UFormField>
           <UFormField label="Subcategories" hint="Up to 2">
-            <UInputMenu
+            <AutoCloseInputMenu
               v-model="bulkSubcategories"
               :items="bulkSubcategoryOptions"
               multiple

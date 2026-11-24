@@ -233,7 +233,7 @@ async function deleteList(id: string) {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by category</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterCategories"
           :items="categoryOptions ?? []"
           multiple
@@ -244,7 +244,7 @@ async function deleteList(id: string) {
       </div>
       <div>
         <label class="text-muted mb-1 block text-xs">Filter by tag</label>
-        <UInputMenu
+        <AutoCloseInputMenu
           v-model="filterTags"
           :items="tagOptions ?? []"
           multiple

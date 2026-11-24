@@ -411,7 +411,7 @@ async function saveImportDraft() {
         </div>
         <div>
           <label class="text-muted mb-1 block text-xs">Filter by category</label>
-          <UInputMenu
+          <AutoCloseInputMenu
             v-model="filterCategories"
             :items="recipeCategoryOptions ?? []"
             multiple
@@ -422,7 +422,7 @@ async function saveImportDraft() {
         </div>
         <div>
           <label class="text-muted mb-1 block text-xs">Filter by tag</label>
-          <UInputMenu
+          <AutoCloseInputMenu
             v-model="filterTags"
             :items="recipeTagOptions ?? []"
             multiple
@@ -574,7 +574,7 @@ async function saveImportDraft() {
             <RecipeItemField v-model:item="row.item" :item-options="itemOptions" />
             <div class="grid grid-cols-2 gap-2">
               <UInputNumber v-model="row.quantity" placeholder="Qty" :min="0" />
-              <UInputMenu
+              <AutoCloseInputMenu
                 v-model="row.unitId"
                 :items="unitOptions ?? []"
                 value-key="id"

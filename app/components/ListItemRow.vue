@@ -104,6 +104,11 @@ function sourcesLabel(sources: ItemRow['list_item_sources']) {
 const showEditSize = ref(false)
 const showEditNotes = ref(false)
 
+// single-select dropdowns normally close on their own after a pick, but
+// this one doesn't reliably (its :items recomputes on every amount change,
+// which seems to confuse the combobox's own open-state tracking) - force it
+const editUnitOpen = ref(false)
+
 const editUnitOptionsForAmount = computed(() => {
   const label = (u: { name_singular: string; name_plural: string }) =>
     draft.value?.amount != null && draft.value.amount !== 1 ? u.name_plural : u.name_singular
@@ -306,12 +311,14 @@ const editUnitOptionsForAmount = computed(() => {
         />
         <USelectMenu
           v-model="draft.unitId"
+          v-model:open="editUnitOpen"
           :items="editUnitOptionsForAmount"
           value-key="id"
           label-key="label"
           :filter-fields="UNIT_FILTER_FIELDS"
           placeholder="Unit"
           class="flex-1"
+          @update:model-value="editUnitOpen = false"
         />
         <UButton
           v-if="!showEditSize && !draft.size"

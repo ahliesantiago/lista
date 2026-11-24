@@ -18,7 +18,7 @@ function onCreate(searchTerm: string) {
 </script>
 
 <template>
-  <UInputMenu
+  <AutoCloseInputMenu
     v-model="item"
     :items="itemOptions"
     create-item
