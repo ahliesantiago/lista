@@ -67,6 +67,14 @@ watch(
     mobileMoreOpen.value = false
   },
 )
+
+const scrollContainer = ref<HTMLElement | null>(null)
+watch(
+  () => route.fullPath,
+  () => {
+    scrollContainer.value?.scrollTo({ top: 0 })
+  },
+)
 const pageTitles: Record<string, string> = {
   '/': 'Home',
   '/lists': 'Lists',
@@ -189,7 +197,7 @@ useHead({
         </div>
       </header>
 
-      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div ref="scrollContainer" class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
         <main class="flex-1 p-4" :class="user ? 'pb-20 sm:pb-4' : ''">
           <slot />
         </main>

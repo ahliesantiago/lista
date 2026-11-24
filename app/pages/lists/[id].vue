@@ -276,6 +276,7 @@ const subcategoryOptions = computed(() => {
 
 async function saveListField(patch: Record<string, unknown>) {
   await supabase.from('lists').update(patch).eq('id', listId)
+  if (list.value) Object.assign(list.value, patch)
 }
 
 watch(selectedCategories, async (newVal, oldVal) => {
