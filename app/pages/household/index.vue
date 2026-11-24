@@ -2,7 +2,7 @@
 const sections = [
   {
     label: 'Pantry',
-    description: 'Food stock and storage location.',
+    description: 'Food stock and storage location (linked to the Items masterlist).',
     to: '/pantry'
   },
   {

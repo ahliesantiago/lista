@@ -112,6 +112,12 @@ const pageTitle = computed(() =>
   pageEntityName.value ? `${baseTitle.value} — ${pageEntityName.value}` : baseTitle.value,
 )
 
+const householdChildPaths = new Set([
+  ...(navLinks.find((l) => l.to === '/household')?.children?.map((c) => c.to) ?? []),
+  '/storage', // specifically adds the storage path as a child of household
+])
+const isUnderHousehold = computed(() => basePath.value !== null && householdChildPaths.has(basePath.value))
+
 useHead({
   title: computed(() => `${pageTitle.value} - Lista`),
 })
@@ -182,6 +188,8 @@ useHead({
             Home
           </NuxtLink>
           <span v-if="user && route.path !== '/'">></span>
+          <NuxtLink v-if="user && isUnderHousehold" to="/household" class="font-semibold">Household</NuxtLink>
+          <span v-if="user && isUnderHousehold">></span>
           <h1 class="font-semibold">
             <NuxtLink v-if="pageEntityName && basePath" :to="basePath" class="hover:underline">
               {{ baseTitle }}
