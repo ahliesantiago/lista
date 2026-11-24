@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import tailwindColors from 'tailwindcss/colors'
+
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+
+const { primaryColor, setPrimaryColor } = usePrimaryColor()
+function swatchColor(color: string) {
+  return (tailwindColors as Record<string, Record<number, string>>)[color]?.[500] ?? '#888'
+}
 
 const { data: profile, refresh: refreshProfile } = await useAsyncData(
   'settings-profile',
@@ -116,10 +123,35 @@ async function savePassword() {
           </UFormField>
 
           <p v-if="profileError" class="text-sm text-red-500">{{ profileError }}</p>
-          <p v-if="profileSuccess" class="text-sm text-green-600">{{ profileSuccess }}</p>
+          <p v-if="profileSuccess" class="text-sm text-green-500">{{ profileSuccess }}</p>
 
           <UButton type="submit" :loading="profileLoading" class="self-start">Save</UButton>
         </form>
+      </div>
+
+      <div class="rounded border border-default px-4 py-3">
+        <h2 class="mb-3 font-medium">Appearance</h2>
+        <div class="flex flex-col gap-4">
+          <UFormField label="Color mode" hint="Defaults to your system setting">
+            <UColorModeSelect class="w-40" />
+          </UFormField>
+
+          <UFormField label="Color scheme">
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="color in PRIMARY_COLOR_OPTIONS"
+                :key="color"
+                type="button"
+                class="size-8 rounded-full ring-2 ring-offset-2 ring-offset-default transition-shadow"
+                :class="primaryColor === color ? 'ring-default' : 'ring-transparent hover:ring-accented'"
+                :style="{ backgroundColor: swatchColor(color) }"
+                :title="color"
+                :aria-label="`Use ${color} as the color scheme`"
+                @click="setPrimaryColor(color)"
+              />
+            </div>
+          </UFormField>
+        </div>
       </div>
 
       <div class="rounded border border-default px-4 py-3">
@@ -130,7 +162,7 @@ async function savePassword() {
           </UFormField>
 
           <p v-if="emailError" class="text-sm text-red-500">{{ emailError }}</p>
-          <p v-if="emailSuccess" class="text-sm text-green-600">{{ emailSuccess }}</p>
+          <p v-if="emailSuccess" class="text-sm text-primary">{{ emailSuccess }}</p>
 
           <UButton type="submit" :loading="emailLoading" class="self-start">Update email</UButton>
         </form>
@@ -148,7 +180,7 @@ async function savePassword() {
           </UFormField>
 
           <p v-if="passwordError" class="text-sm text-red-500">{{ passwordError }}</p>
-          <p v-if="passwordSuccess" class="text-sm text-green-600">{{ passwordSuccess }}</p>
+          <p v-if="passwordSuccess" class="text-sm text-primary">{{ passwordSuccess }}</p>
 
           <UButton type="submit" :loading="passwordLoading" class="self-start">Update password</UButton>
         </form>

@@ -94,7 +94,7 @@ const currentStepId = computed(() => steps.value?.find((s) => !checked.value[s.i
       <li v-if="steps && steps.length === 0" class="text-muted text-sm">No steps for this recipe.</li>
     </ul>
 
-    <p v-if="steps && steps.length > 0 && !currentStepId" class="mt-4 text-sm font-medium text-green-600">
+    <p v-if="steps && steps.length > 0 && !currentStepId" class="mt-4 text-sm font-medium text-primary">
       All steps done!
     </p>
   </div>

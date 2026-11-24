@@ -40,7 +40,7 @@ async function continueToLogin() {
       </template>
 
       <div v-if="success" class="flex flex-col gap-4">
-        <p class="text-sm text-green-600">Password updated.</p>
+        <p class="text-sm text-primary">Password updated.</p>
         <UButton block @click="continueToLogin">Continue to log in</UButton>
       </div>
 
