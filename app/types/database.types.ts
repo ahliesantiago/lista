@@ -107,6 +107,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           id: string
+          is_equipment: boolean
           name: string
           needs_maintenance: boolean
           needs_replacement: boolean
@@ -120,6 +121,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name: string
           needs_maintenance?: boolean
           needs_replacement?: boolean
@@ -133,6 +135,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name?: string
           needs_maintenance?: boolean
           needs_replacement?: boolean
@@ -195,104 +198,6 @@ export type Database = {
           },
         ]
       }
-      equipment: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          id: string
-          name: string
-          notes: string | null
-          space_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          id?: string
-          name: string
-          notes?: string | null
-          space_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          id?: string
-          name?: string
-          notes?: string | null
-          space_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "equipment_space_id_fkey"
-            columns: ["space_id"]
-            isOneToOne: false
-            referencedRelation: "spaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      equipment_locations: {
-        Row: {
-          equipment_id: string
-          storage_location_id: string
-        }
-        Insert: {
-          equipment_id: string
-          storage_location_id: string
-        }
-        Update: {
-          equipment_id?: string
-          storage_location_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "equipment_locations_equipment_id_fkey"
-            columns: ["equipment_id"]
-            isOneToOne: false
-            referencedRelation: "equipment"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "equipment_locations_storage_location_id_fkey"
-            columns: ["storage_location_id"]
-            isOneToOne: false
-            referencedRelation: "storage_locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      equipment_rooms: {
-        Row: {
-          equipment_id: string
-          room_id: string
-        }
-        Insert: {
-          equipment_id: string
-          room_id: string
-        }
-        Update: {
-          equipment_id?: string
-          room_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "equipment_rooms_equipment_id_fkey"
-            columns: ["equipment_id"]
-            isOneToOne: false
-            referencedRelation: "equipment"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "equipment_rooms_room_id_fkey"
-            columns: ["room_id"]
-            isOneToOne: false
-            referencedRelation: "rooms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       furniture: {
         Row: {
           brand: string | null
@@ -300,6 +205,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           id: string
+          is_equipment: boolean
           name: string
           needs_maintenance: boolean
           needs_replacement: boolean
@@ -313,6 +219,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name: string
           needs_maintenance?: boolean
           needs_replacement?: boolean
@@ -326,6 +233,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name?: string
           needs_maintenance?: boolean
           needs_replacement?: boolean
@@ -633,6 +541,7 @@ export type Database = {
           default_unit_id: string | null
           deleted_at: string | null
           id: string
+          is_equipment: boolean
           name: string
           notes: string | null
           plural_name: string | null
@@ -646,6 +555,7 @@ export type Database = {
           default_unit_id?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name: string
           notes?: string | null
           plural_name?: string | null
@@ -659,6 +569,7 @@ export type Database = {
           default_unit_id?: string | null
           deleted_at?: string | null
           id?: string
+          is_equipment?: boolean
           name?: string
           notes?: string | null
           plural_name?: string | null
@@ -1002,23 +913,46 @@ export type Database = {
       }
       recipe_equipment: {
         Row: {
-          equipment_id: string
+          appliance_id: string | null
+          furniture_id: string | null
+          id: string
+          item_id: string | null
           recipe_id: string
         }
         Insert: {
-          equipment_id: string
+          appliance_id?: string | null
+          furniture_id?: string | null
+          id?: string
+          item_id?: string | null
           recipe_id: string
         }
         Update: {
-          equipment_id?: string
+          appliance_id?: string | null
+          furniture_id?: string | null
+          id?: string
+          item_id?: string | null
           recipe_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "recipe_equipment_equipment_id_fkey"
-            columns: ["equipment_id"]
+            foreignKeyName: "recipe_equipment_appliance_id_fkey"
+            columns: ["appliance_id"]
             isOneToOne: false
-            referencedRelation: "equipment"
+            referencedRelation: "appliances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_equipment_furniture_id_fkey"
+            columns: ["furniture_id"]
+            isOneToOne: false
+            referencedRelation: "furniture"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_equipment_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
             referencedColumns: ["id"]
           },
           {

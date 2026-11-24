@@ -2,6 +2,8 @@
 import draggable from 'vuedraggable'
 
 type Option = { id: string; name: string; plural_name?: string | null }
+type EquipmentSource = 'item' | 'appliance' | 'furniture'
+type EquipmentOption = { id: string; name: string; source: EquipmentSource }
 type CategoryOption = { id: string; name: string; parent_id: string | null }
 type UnitOption = {
   id: string
@@ -30,7 +32,11 @@ const { data: recipe } = await useAsyncData(`recipe-${recipeId}`, async () => {
       is_favorite, is_interested,
       recipe_category_links(recipe_categories(id, name, parent_id)),
       recipe_tag_links(recipe_tags(id, name)),
-      recipe_equipment(equipment(id, name))
+      recipe_equipment(
+        item:items(id, name),
+        appliance:appliances(id, name),
+        furniture:furniture(id, name)
+      )
     `)
     .eq('id', recipeId)
     .is('deleted_at', null)
@@ -98,11 +104,25 @@ const { data: tagOptionsInitial } = await useAsyncData('recipe-tag-options', asy
 })
 tagOptions.value = tagOptionsInitial.value ?? []
 
-const equipmentOptions = ref<Option[]>([])
+// "equipment" is just items/appliances/furniture flagged is_equipment -
+// merge all three into one picker, each option tagged with which table it
+// actually lives in so creating/linking new equipment can route correctly
+const equipmentOptions = ref<EquipmentOption[]>([])
 const { data: equipmentOptionsInitial } = await useAsyncData('equipment-options', async () => {
-  const { data, error } = await supabase.from('equipment').select('id, name').is('deleted_at', null).order('name')
-  if (error) throw error
-  return data
+  const [itemsRes, appliancesRes, furnitureRes] = await Promise.all([
+    supabase.from('items').select('id, name').eq('is_equipment', true).is('deleted_at', null).order('name'),
+    supabase.from('appliances').select('id, name').eq('is_equipment', true).is('deleted_at', null).order('name'),
+    supabase.from('furniture').select('id, name').eq('is_equipment', true).is('deleted_at', null).order('name'),
+  ])
+  if (itemsRes.error) throw itemsRes.error
+  if (appliancesRes.error) throw appliancesRes.error
+  if (furnitureRes.error) throw furnitureRes.error
+  const options: EquipmentOption[] = [
+    ...itemsRes.data.map((i) => ({ id: i.id, name: i.name, source: 'item' as const })),
+    ...appliancesRes.data.map((a) => ({ id: a.id, name: a.name, source: 'appliance' as const })),
+    ...furnitureRes.data.map((f) => ({ id: f.id, name: f.name, source: 'furniture' as const })),
+  ]
+  return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 equipmentOptions.value = equipmentOptionsInitial.value ?? []
 
@@ -157,7 +177,12 @@ const linkedCategories = recipe.value?.recipe_category_links.map((rc) => rc.reci
 const selectedCategories = ref<CategoryOption[]>(linkedCategories.filter((c) => !c.parent_id))
 const selectedSubcategories = ref<CategoryOption[]>(linkedCategories.filter((c) => c.parent_id))
 const recipeTags = ref<Option[]>(recipe.value?.recipe_tag_links.map((rt) => rt.recipe_tags!) ?? [])
-const recipeEquipment = ref<Option[]>(recipe.value?.recipe_equipment.map((re) => re.equipment!) ?? [])
+function equipmentOptionFor(re: { item: Option | null; appliance: Option | null; furniture: Option | null }): EquipmentOption {
+  if (re.item) return { id: re.item.id, name: re.item.name, source: 'item' }
+  if (re.appliance) return { id: re.appliance.id, name: re.appliance.name, source: 'appliance' }
+  return { id: re.furniture!.id, name: re.furniture!.name, source: 'furniture' }
+}
+const recipeEquipment = ref<EquipmentOption[]>(recipe.value?.recipe_equipment.map(equipmentOptionFor) ?? [])
 
 const subcategoryOptions = computed(() => {
   const parentIds = new Set(selectedCategories.value.map((c) => c.id))
@@ -231,12 +256,18 @@ watch(recipeEquipment, async (newVal, oldVal) => {
   const added = newVal.filter((e) => !oldVal.some((o) => o.id === e.id))
   const removed = oldVal.filter((o) => !newVal.some((e) => e.id === o.id))
   if (added.length > 0) {
-    await supabase
-      .from('recipe_equipment')
-      .insert(added.map((e) => ({ recipe_id: recipeId, equipment_id: e.id })))
+    await supabase.from('recipe_equipment').insert(
+      added.map((e) => ({
+        recipe_id: recipeId,
+        item_id: e.source === 'item' ? e.id : null,
+        appliance_id: e.source === 'appliance' ? e.id : null,
+        furniture_id: e.source === 'furniture' ? e.id : null,
+      })),
+    )
   }
   for (const r of removed) {
-    await supabase.from('recipe_equipment').delete().eq('recipe_id', recipeId).eq('equipment_id', r.id)
+    const column = r.source === 'item' ? 'item_id' : r.source === 'appliance' ? 'appliance_id' : 'furniture_id'
+    await supabase.from('recipe_equipment').delete().eq('recipe_id', recipeId).eq(column, r.id)
   }
 })
 
@@ -260,16 +291,22 @@ async function onCreateTagOption(searchTerm: string) {
   recipeTags.value.push(data)
 }
 
+// new equipment created inline here always lands as an appliance - the
+// most common case (most "equipment" is a physical kitchen appliance), and
+// matches the system default for migrated equipment. Anything that's
+// really a plain item or furniture can be flagged is_equipment there
+// instead and will show up in this picker like any other option.
 async function onCreateEquipmentOption(searchTerm: string) {
   if (!space.value) return
   const { data, error: insertError } = await supabase
-    .from('equipment')
-    .insert({ space_id: space.value.id, name: searchTerm })
+    .from('appliances')
+    .insert({ space_id: space.value.id, name: searchTerm, is_equipment: true })
     .select('id, name')
     .single()
   if (insertError || !data) return
-  equipmentOptions.value.push(data)
-  recipeEquipment.value.push(data)
+  const option: EquipmentOption = { id: data.id, name: data.name, source: 'appliance' }
+  equipmentOptions.value.push(option)
+  recipeEquipment.value.push(option)
 }
 
 async function deleteRecipe() {
@@ -751,7 +788,7 @@ async function saveEditStep(id: string) {
             @create="onCreateTagOption"
           />
         </UFormField>
-        <UFormField label="Equipment" hint="Optional">
+        <UFormField label="Cooking Equipment" hint="Optional">
           <UInputMenu
             v-model="recipeEquipment"
             :items="equipmentOptions"

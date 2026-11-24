@@ -43,7 +43,7 @@ const taxonomyTiles = [
 
 const householdTiles = [
   { to: '/home-inventory', label: 'Inventory', icon: 'i-lucide-box' },
-  { to: '/equipment', label: 'Equipment', icon: 'i-lucide-wrench' },
+  { to: '/equipment', label: 'Cooking Equipment', icon: 'i-lucide-wrench' },
   { to: '/appliances', label: 'Appliances', icon: 'i-lucide-washing-machine' },
   { to: '/furniture', label: 'Furniture', icon: 'i-lucide-armchair' },
   { to: '/rooms', label: 'Rooms', icon: 'i-lucide-door-open' },

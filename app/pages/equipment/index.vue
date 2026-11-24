@@ -1,196 +1,142 @@
 <script setup lang="ts">
-type Option = { id: string; name: string }
-const MAX_LOCATIONS = 2
-const MAX_ROOMS = 2
+// Cooking equipment isn't its own table - it's items/appliances/furniture
+// flagged is_equipment. This page is a merged, filtered view over the
+// three, not an independent CRUD surface: location/room assignment and
+// permanent deletion stay on each source's own dedicated page (Items,
+// Appliances, Furniture) to avoid duplicating that logic three times here.
+// "Remove" on this page only clears is_equipment - it never touches
+// deleted_at, so the underlying item/appliance/furniture is untouched.
+type EquipmentSource = 'item' | 'appliance' | 'furniture'
+type EquipmentRow = {
+  id: string
+  source: EquipmentSource
+  name: string
+  notes: string | null
+  locations: string[]
+  rooms: string[]
+}
+
+const SOURCE_LABELS: Record<EquipmentSource, string> = {
+  item: 'Item',
+  appliance: 'Appliance',
+  furniture: 'Furniture',
+}
+const SOURCE_TABLES: Record<EquipmentSource, 'items' | 'appliances' | 'furniture'> = {
+  item: 'items',
+  appliance: 'appliances',
+  furniture: 'furniture',
+}
 
 const supabase = useSupabaseClient()
 const { data: space } = await useCurrentSpace()
 
-const { data: equipment, refresh } = await useAsyncData('equipment', async () => {
-  const { data, error } = await supabase
-    .from('equipment')
-    .select(`
-      id, name, notes,
-      equipment_locations(storage_location:storage_locations(id, name, room:rooms(id, name))),
-      equipment_rooms(room:rooms(id, name))
-    `)
-    .is('deleted_at', null)
-    .order('name')
-  if (error) throw error
-  return data
+const { data: equipment, refresh } = await useAsyncData('cooking-equipment', async () => {
+  const [itemsRes, appliancesRes, furnitureRes] = await Promise.all([
+    supabase.from('items').select('id, name, notes').eq('is_equipment', true).is('deleted_at', null).order('name'),
+    supabase
+      .from('appliances')
+      .select(`
+        id, name, notes,
+        appliance_locations(storage_location:storage_locations(id, name)),
+        appliance_rooms(room:rooms(id, name))
+      `)
+      .eq('is_equipment', true)
+      .is('deleted_at', null)
+      .order('name'),
+    supabase
+      .from('furniture')
+      .select(`
+        id, name, notes,
+        furniture_locations(storage_location:storage_locations(id, name)),
+        furniture_rooms(room:rooms(id, name))
+      `)
+      .eq('is_equipment', true)
+      .is('deleted_at', null)
+      .order('name'),
+  ])
+  if (itemsRes.error) throw itemsRes.error
+  if (appliancesRes.error) throw appliancesRes.error
+  if (furnitureRes.error) throw furnitureRes.error
+
+  const rows: EquipmentRow[] = [
+    ...itemsRes.data.map((i): EquipmentRow => ({ id: i.id, source: 'item', name: i.name, notes: i.notes, locations: [], rooms: [] })),
+    ...appliancesRes.data.map(
+      (a): EquipmentRow => ({
+        id: a.id,
+        source: 'appliance',
+        name: a.name,
+        notes: a.notes,
+        locations: a.appliance_locations.map((l) => l.storage_location!.name),
+        rooms: a.appliance_rooms.map((r) => r.room!.name),
+      }),
+    ),
+    ...furnitureRes.data.map(
+      (f): EquipmentRow => ({
+        id: f.id,
+        source: 'furniture',
+        name: f.name,
+        notes: f.notes,
+        locations: f.furniture_locations.map((l) => l.storage_location!.name),
+        rooms: f.furniture_rooms.map((r) => r.room!.name),
+      }),
+    ),
+  ]
+  return rows.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-const { data: locationOptionsInitial } = await useAsyncData('pantry-location-options', async () => {
-  const { data, error } = await supabase
-    .from('storage_locations')
-    .select('id, name, room:rooms(id, name)')
-    .is('deleted_at', null)
-    .order('name')
-  if (error) throw error
-  return data
-})
-const locationOptionsForPicker = computed(() =>
-  (locationOptionsInitial.value ?? []).map((l) => ({
-    ...l,
-    label: l.room ? `${l.name} (${l.room.name})` : l.name,
-  })),
-)
+const sortedEquipment = computed(() => equipment.value ?? [])
 
-const { data: roomOptions } = await useAsyncData('room-options', async () => {
-  const { data, error } = await supabase.from('rooms').select('id, name').is('deleted_at', null).order('name')
-  if (error) throw error
-  return data as Option[]
-})
-
-type EquipmentRow = NonNullable<typeof equipment.value>[number]
-
-const filterLocations = ref<Option[]>([])
-const filterRooms = ref<Option[]>([])
-
-const filteredEquipment = computed(() => {
-  let list = equipment.value ?? []
-  if (filterLocations.value.length > 0) {
-    const ids = new Set(filterLocations.value.map((l) => l.id))
-    list = list.filter((e) => e.equipment_locations.some((el) => ids.has(el.storage_location!.id)))
-  }
-  if (filterRooms.value.length > 0) {
-    const ids = new Set(filterRooms.value.map((r) => r.id))
-    list = list.filter((e) => e.equipment_rooms.some((er) => ids.has(er.room!.id)))
-  }
-  return list
-})
-
-const {
-  sortBy,
-  groupBy,
-  sortOptions,
-  groupOptions,
-  sortedItems: visibleEquipment,
-  groupedItems: groupedEquipment,
-} = useListControls<EquipmentRow>(
-  filteredEquipment,
-  {
-    'name-asc': { label: 'Name (A–Z)', compare: (a, b) => a.name.localeCompare(b.name) },
-    'name-desc': { label: 'Name (Z–A)', compare: (a, b) => b.name.localeCompare(a.name) },
-  },
-  {
-    location: {
-      label: 'Location',
-      getKeys: (e) =>
-        e.equipment_locations.length > 0
-          ? e.equipment_locations.map((el) => el.storage_location!.name)
-          : ['No location set'],
-    },
-    room: {
-      label: 'Room',
-      getKeys: (e) => (e.equipment_rooms.length > 0 ? e.equipment_rooms.map((er) => er.room!.name) : ['Unassigned']),
-    },
-  },
-)
-
+const newSource = ref<EquipmentSource>('appliance')
+const sourceOptions = (Object.entries(SOURCE_LABELS) as [EquipmentSource, string][]).map(([value, label]) => ({
+  value,
+  label,
+}))
 const newName = ref('')
 const newNotes = ref('')
-const newLocations = ref<Option[]>([])
-const newRooms = ref<Option[]>([])
 const error = ref('')
 const saving = ref(false)
 
-watch(newLocations, (val) => {
-  if (val.length > MAX_LOCATIONS) newLocations.value = val.slice(0, MAX_LOCATIONS)
-})
-watch(newRooms, (val) => {
-  if (val.length > MAX_ROOMS) newRooms.value = val.slice(0, MAX_ROOMS)
-})
-
 async function addEquipment() {
-  if (!space.value) return
+  if (!space.value || !newName.value.trim()) return
   error.value = ''
   saving.value = true
-  const { data, error: insertError } = await supabase
-    .from('equipment')
-    .insert({
-      space_id: space.value.id,
-      name: newName.value.trim(),
-      notes: newNotes.value.trim() || null,
-    })
-    .select('id')
-    .single()
+  const { error: insertError } = await supabase
+    .from(SOURCE_TABLES[newSource.value])
+    .insert({ space_id: space.value.id, name: newName.value.trim(), notes: newNotes.value.trim() || null, is_equipment: true })
   saving.value = false
-  if (insertError || !data) {
-    error.value = insertError?.message ?? 'Failed to add equipment'
+  if (insertError) {
+    error.value = insertError.message
     return
-  }
-  if (newLocations.value.length > 0) {
-    await supabase.from('equipment_locations').insert(
-      newLocations.value.map((l) => ({ equipment_id: data.id, storage_location_id: l.id })),
-    )
-  }
-  if (newRooms.value.length > 0) {
-    await supabase.from('equipment_rooms').insert(
-      newRooms.value.map((r) => ({ equipment_id: data.id, room_id: r.id })),
-    )
   }
   newName.value = ''
   newNotes.value = ''
-  newLocations.value = []
-  newRooms.value = []
   await refresh()
 }
 
-async function deleteEquipment(id: string) {
-  await supabase.from('equipment').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+async function removeFromEquipment(row: EquipmentRow) {
+  await supabase.from(SOURCE_TABLES[row.source]).update({ is_equipment: false }).eq('id', row.id)
   await refresh()
 }
 
-type Equipment = NonNullable<typeof equipment.value>[number]
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const editNotes = ref('')
-const editLocations = ref<Option[]>([])
-const editRooms = ref<Option[]>([])
 
-watch(editLocations, (val) => {
-  if (val.length > MAX_LOCATIONS) editLocations.value = val.slice(0, MAX_LOCATIONS)
-})
-watch(editRooms, (val) => {
-  if (val.length > MAX_ROOMS) editRooms.value = val.slice(0, MAX_ROOMS)
-})
-
-function startEdit(item: Equipment) {
-  editingId.value = item.id
-  editName.value = item.name
-  editNotes.value = item.notes ?? ''
-  editLocations.value = item.equipment_locations.map((l) => {
-    const loc = l.storage_location!
-    return (
-      locationOptionsForPicker.value.find((o) => o.id === loc.id) ?? {
-        ...loc,
-        label: loc.room ? `${loc.name} (${loc.room.name})` : loc.name,
-      }
-    )
-  })
-  editRooms.value = item.equipment_rooms.map((r) => r.room!)
+function startEdit(row: EquipmentRow) {
+  editingId.value = row.id
+  editName.value = row.name
+  editNotes.value = row.notes ?? ''
 }
 
 function cancelEdit() {
   editingId.value = null
 }
 
-async function saveEdit(id: string) {
+async function saveEdit(row: EquipmentRow) {
   await supabase
-    .from('equipment')
+    .from(SOURCE_TABLES[row.source])
     .update({ name: editName.value.trim(), notes: editNotes.value.trim() || null })
-    .eq('id', id)
-  await supabase.from('equipment_locations').delete().eq('equipment_id', id)
-  await supabase.from('equipment_rooms').delete().eq('equipment_id', id)
-  if (editLocations.value.length > 0) {
-    await supabase.from('equipment_locations').insert(
-      editLocations.value.map((l) => ({ equipment_id: id, storage_location_id: l.id })),
-    )
-  }
-  if (editRooms.value.length > 0) {
-    await supabase.from('equipment_rooms').insert(editRooms.value.map((r) => ({ equipment_id: id, room_id: r.id })))
-  }
+    .eq('id', row.id)
   editingId.value = null
   await refresh()
 }
@@ -200,204 +146,53 @@ async function saveEdit(id: string) {
   <div class="mx-auto max-w-lg">
     <form class="mb-6 flex flex-col gap-2" @submit.prevent="addEquipment">
       <div class="flex flex-col gap-2 sm:flex-row">
+        <USelect v-model="newSource" :items="sourceOptions" value-key="value" class="sm:w-36" />
         <UInput v-model="newName" placeholder="Equipment (e.g. Blender)" required class="flex-1" />
-        <UInput v-model="newNotes" placeholder="Notes (optional)" class="flex-1" />
         <UButton type="submit" :loading="saving">Add</UButton>
       </div>
-      <div class="flex flex-col gap-2">
-        <UInputMenu
-          v-model="newLocations"
-          :items="locationOptionsForPicker"
-          multiple
-          label-key="label"
-          placeholder="Locations (up to 2, optional)"
-          class="w-full"
-        />
-        <UInputMenu
-          v-model="newRooms"
-          :items="roomOptions ?? []"
-          multiple
-          label-key="name"
-          placeholder="Rooms (up to 2, optional)"
-          class="w-full"
-        />
-      </div>
+      <UInput v-model="newNotes" placeholder="Notes (optional)" />
     </form>
+    <p class="text-muted mb-4 text-xs">
+      Classifying as Appliance or Furniture lets you also set its location/room from those pages. Items don't track
+      location unless also added to Home Inventory.
+    </p>
 
     <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>
 
-    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-      <div>
-        <label class="text-muted mb-1 block text-xs">Sort by</label>
-        <USelect v-model="sortBy" :items="sortOptions" class="w-full" />
-      </div>
-      <div>
-        <label class="text-muted mb-1 block text-xs">Group by</label>
-        <USelect v-model="groupBy" :items="groupOptions" class="w-full" />
-      </div>
-      <div>
-        <label class="text-muted mb-1 block text-xs">Filter by location</label>
-        <UInputMenu
-          v-model="filterLocations"
-          :items="locationOptionsForPicker"
-          multiple
-          label-key="label"
-          placeholder="Any location"
-          class="w-full"
-        />
-      </div>
-      <div>
-        <label class="text-muted mb-1 block text-xs">Filter by room</label>
-        <UInputMenu
-          v-model="filterRooms"
-          :items="roomOptions ?? []"
-          multiple
-          label-key="name"
-          placeholder="Any room"
-          class="w-full"
-        />
-      </div>
-    </div>
-
-    <template v-if="groupedEquipment">
-      <div v-for="[groupName, groupEquipment] in groupedEquipment" :key="groupName" class="mb-4">
-        <h2 class="mb-2 text-sm font-semibold text-muted">{{ groupName }}</h2>
-        <ul class="flex flex-col gap-2">
-          <li v-for="item in groupEquipment" :key="item.id" class="rounded border border-default px-3 py-2">
-            <div v-if="editingId !== item.id" class="flex items-center justify-between">
-              <span>
-                {{ item.name }}
-                <span v-if="item.notes" class="text-muted text-sm">({{ item.notes }})</span>
-                <UBadge
-                  v-for="il in item.equipment_locations"
-                  :key="il.storage_location!.id"
-                  size="sm"
-                  variant="outline"
-                  class="ml-2"
-                >
-                  {{ il.storage_location!.name }}
-                </UBadge>
-                <UBadge
-                  v-for="ir in item.equipment_rooms"
-                  :key="ir.room!.id"
-                  size="sm"
-                  variant="outline"
-                  class="ml-2"
-                >
-                  {{ ir.room!.name }}
-                </UBadge>
-              </span>
-              <div class="flex gap-1">
-                <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(item)" />
-                <UButton
-                  size="sm"
-                  variant="ghost"
-                  color="error"
-                  icon="i-lucide-trash-2"
-                  @click="deleteEquipment(item.id)"
-                />
-              </div>
-            </div>
-            <div v-else class="flex flex-col gap-2">
-              <div class="flex flex-col gap-2 sm:flex-row">
-                <UInput v-model="editName" placeholder="Equipment" class="flex-1" />
-                <UInput v-model="editNotes" placeholder="Notes (optional)" class="flex-1" />
-              </div>
-              <div class="flex flex-col gap-2">
-                <UInputMenu
-                  v-model="editLocations"
-                  :items="locationOptionsForPicker"
-                  multiple
-                  label-key="label"
-                  placeholder="Locations (up to 2)"
-                  class="w-full"
-                />
-                <UInputMenu
-                  v-model="editRooms"
-                  :items="roomOptions ?? []"
-                  multiple
-                  label-key="name"
-                  placeholder="Rooms (up to 2)"
-                  class="w-full"
-                />
-              </div>
-              <div class="flex gap-1">
-                <UButton size="sm" @click="saveEdit(item.id)">Save</UButton>
-                <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
-              </div>
-            </div>
-          </li>
-        </ul>
-      </div>
-      <p v-if="groupedEquipment.length === 0" class="text-muted text-sm">No equipment matches.</p>
-    </template>
-
-    <ul v-else class="flex flex-col gap-2">
-      <li v-for="item in visibleEquipment" :key="item.id" class="rounded border border-default px-3 py-2">
-        <div v-if="editingId !== item.id" class="flex items-center justify-between">
-          <span>
-            {{ item.name }}
-            <span v-if="item.notes" class="text-muted text-sm">({{ item.notes }})</span>
-            <UBadge
-              v-for="il in item.equipment_locations"
-              :key="il.storage_location!.id"
-              size="sm"
-              variant="outline"
-              class="ml-2"
-            >
-              {{ il.storage_location!.name }}
-            </UBadge>
-            <UBadge
-              v-for="ir in item.equipment_rooms"
-              :key="ir.room!.id"
-              size="sm"
-              variant="outline"
-              class="ml-2"
-            >
-              {{ ir.room!.name }}
-            </UBadge>
-          </span>
-          <div class="flex gap-1">
-            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(item)" />
+    <ul class="flex flex-col gap-2">
+      <li v-for="row in sortedEquipment" :key="`${row.source}-${row.id}`" class="rounded border border-default px-3 py-2">
+        <div v-if="editingId !== row.id" class="flex items-center justify-between gap-2">
+          <div>
+            <span>{{ row.name }}</span>
+            <UBadge size="sm" variant="subtle" color="neutral" class="ml-2">{{ SOURCE_LABELS[row.source] }}</UBadge>
+            <UBadge v-for="l in row.locations" :key="l" size="sm" variant="outline" class="ml-2">{{ l }}</UBadge>
+            <UBadge v-for="r in row.rooms" :key="r" size="sm" variant="outline" class="ml-2">{{ r }}</UBadge>
+            <p v-if="row.notes" class="text-muted mt-1 text-sm">{{ row.notes }}</p>
+          </div>
+          <div class="flex shrink-0 gap-1">
+            <UButton size="sm" variant="ghost" icon="i-lucide-pencil" @click="startEdit(row)" />
             <UButton
               size="sm"
               variant="ghost"
               color="error"
-              icon="i-lucide-trash-2"
-              @click="deleteEquipment(item.id)"
+              icon="i-lucide-x"
+              title="Remove from cooking equipment (doesn't delete it)"
+              @click="removeFromEquipment(row)"
             />
           </div>
         </div>
         <div v-else class="flex flex-col gap-2">
           <div class="flex flex-col gap-2 sm:flex-row">
-            <UInput v-model="editName" placeholder="Equipment" class="flex-1" />
+            <UInput v-model="editName" placeholder="Name" class="flex-1" />
             <UInput v-model="editNotes" placeholder="Notes (optional)" class="flex-1" />
           </div>
-          <div class="flex flex-col gap-2">
-            <UInputMenu
-              v-model="editLocations"
-              :items="locationOptionsForPicker"
-              multiple
-              label-key="label"
-              placeholder="Locations (up to 2)"
-              class="w-full"
-            />
-            <UInputMenu
-              v-model="editRooms"
-              :items="roomOptions ?? []"
-              multiple
-              label-key="name"
-              placeholder="Rooms (up to 2)"
-              class="w-full"
-            />
-          </div>
           <div class="flex gap-1">
-            <UButton size="sm" @click="saveEdit(item.id)">Save</UButton>
+            <UButton size="sm" @click="saveEdit(row)">Save</UButton>
             <UButton size="sm" variant="ghost" @click="cancelEdit">Cancel</UButton>
           </div>
         </div>
       </li>
-      <li v-if="visibleEquipment.length === 0" class="text-muted text-sm">No equipment matches.</li>
+      <li v-if="sortedEquipment.length === 0" class="text-muted text-sm">No cooking equipment yet.</li>
     </ul>
   </div>
 </template>

@@ -174,20 +174,6 @@ const {
 })
 
 const {
-  data: equipmentRows,
-  error: equipmentError,
-  refresh: refreshEquipment,
-} = await useAsyncData('trash-equipment', async () => {
-  const { data, error } = await supabase
-    .from('equipment')
-    .select('id, name, deleted_at')
-    .not('deleted_at', 'is', null)
-    .order('deleted_at', { ascending: false })
-  if (error) throw error
-  return data
-})
-
-const {
   data: recipeCategories,
   error: recipeCategoriesError,
   refresh: refreshRecipeCategories,
@@ -358,13 +344,6 @@ const sections = computed(() => [
     display: (r: any) => r.name,
   },
   {
-    label: 'Equipment',
-    table: 'equipment',
-    rows: equipmentRows.value,
-    error: equipmentError.value,
-    display: (r: any) => r.name,
-  },
-  {
     label: 'Recipe Categories',
     table: 'recipe_categories',
     rows: recipeCategories.value,
@@ -406,7 +385,6 @@ async function refreshAll() {
     refreshAppliances(),
     refreshFurniture(),
     refreshRecipes(),
-    refreshEquipment(),
     refreshRecipeCategories(),
     refreshRecipeTags(),
   ])

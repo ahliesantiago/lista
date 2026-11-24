@@ -10,7 +10,7 @@ const { data: furniture, refresh } = await useAsyncData('furniture', async () =>
   const { data, error } = await supabase
     .from('furniture')
     .select(`
-      id, name, brand, quantity, needs_maintenance, needs_replacement, notes,
+      id, name, brand, quantity, needs_maintenance, needs_replacement, notes, is_equipment,
       furniture_locations(storage_location:storage_locations(id, name, room:rooms(id, name))),
       furniture_rooms(room:rooms(id, name))
     `)
@@ -94,6 +94,7 @@ const newQuantity = ref(1)
 const newNeedsMaintenance = ref(false)
 const newNeedsReplacement = ref(false)
 const newNotes = ref('')
+const newIsEquipment = ref(false)
 const newLocations = ref<Option[]>([])
 const newRooms = ref<Option[]>([])
 const error = ref('')
@@ -120,6 +121,7 @@ async function addFurniture() {
       needs_maintenance: newNeedsMaintenance.value,
       needs_replacement: newNeedsReplacement.value,
       notes: newNotes.value.trim() || null,
+      is_equipment: newIsEquipment.value,
     })
     .select('id')
     .single()
@@ -142,6 +144,7 @@ async function addFurniture() {
   newNeedsMaintenance.value = false
   newNeedsReplacement.value = false
   newNotes.value = ''
+  newIsEquipment.value = false
   newLocations.value = []
   newRooms.value = []
   await refresh()
@@ -159,6 +162,7 @@ const editQuantity = ref(1)
 const editNeedsMaintenance = ref(false)
 const editNeedsReplacement = ref(false)
 const editNotes = ref('')
+const editIsEquipment = ref(false)
 const editLocations = ref<Option[]>([])
 const editRooms = ref<Option[]>([])
 
@@ -177,6 +181,7 @@ function startEdit(item: FurnitureRow) {
   editNeedsMaintenance.value = item.needs_maintenance
   editNeedsReplacement.value = item.needs_replacement
   editNotes.value = item.notes ?? ''
+  editIsEquipment.value = item.is_equipment
   editLocations.value = item.furniture_locations.map((l) => {
     const loc = l.storage_location!
     return (
@@ -203,6 +208,7 @@ async function saveEdit(id: string) {
       needs_maintenance: editNeedsMaintenance.value,
       needs_replacement: editNeedsReplacement.value,
       notes: editNotes.value.trim() || null,
+      is_equipment: editIsEquipment.value,
     })
     .eq('id', id)
   await supabase.from('furniture_locations').delete().eq('furniture_id', id)
@@ -229,6 +235,7 @@ async function saveEdit(id: string) {
         <UInputNumber v-model="newQuantity" :min="1" />
         <UCheckbox v-model="newNeedsMaintenance" label="Needs maintenance" />
         <UCheckbox v-model="newNeedsReplacement" label="Needs replacement" />
+        <UCheckbox v-model="newIsEquipment" label="Used as cooking equipment" class="col-span-2 whitespace-nowrap" />
         <UInput v-model="newNotes" placeholder="Notes (optional)" class="col-span-2" />
       </div>
       <div class="flex flex-col gap-2">
@@ -337,6 +344,7 @@ async function saveEdit(id: string) {
                 <UInputNumber v-model="editQuantity" :min="1" />
                 <UCheckbox v-model="editNeedsMaintenance" label="Needs maintenance" />
                 <UCheckbox v-model="editNeedsReplacement" label="Needs replacement" />
+                <UCheckbox v-model="editIsEquipment" label="Used as cooking equipment" class="col-span-2 whitespace-nowrap" />
                 <UInput v-model="editNotes" placeholder="Notes (optional)" class="col-span-2" />
               </div>
               <div class="flex flex-col gap-2">
@@ -415,6 +423,7 @@ async function saveEdit(id: string) {
             <UInputNumber v-model="editQuantity" :min="1" />
             <UCheckbox v-model="editNeedsMaintenance" label="Needs maintenance" />
             <UCheckbox v-model="editNeedsReplacement" label="Needs replacement" />
+            <UCheckbox v-model="editIsEquipment" label="Used as cooking equipment" class="col-span-2 whitespace-nowrap" />
             <UInput v-model="editNotes" placeholder="Notes (optional)" class="col-span-2" />
           </div>
           <div class="flex flex-col gap-2">

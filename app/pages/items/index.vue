@@ -19,7 +19,7 @@ const { data: items, error: itemsError, refresh } = await useAsyncData('items', 
   const { data, error } = await supabase
     .from('items')
     .select(`
-      id, name, plural_name, price, notes,
+      id, name, plural_name, price, notes, is_equipment,
       item_categories(is_primary, is_primary_subcategory, categories(id, name, parent_id)),
       default_unit:units!items_default_unit_id_fkey(id, name_singular),
       item_tags(is_primary, tags(id, name)),
@@ -357,6 +357,7 @@ const name = ref('')
 const pluralName = ref('')
 const price = ref<number | null>(null)
 const notes = ref('')
+const isEquipment = ref(false)
 const selectedCategories = ref<CategoryOption[]>([])
 const selectedSubcategories = ref<CategoryOption[]>([])
 const defaultUnitId = ref<string | null>(null)
@@ -423,6 +424,7 @@ function resetForm() {
   pluralName.value = ''
   price.value = null
   notes.value = ''
+  isEquipment.value = false
   selectedCategories.value = []
   selectedSubcategories.value = []
   defaultUnitId.value = null
@@ -450,6 +452,7 @@ function openEdit(item: NonNullable<typeof items.value>[number]) {
   pluralName.value = item.plural_name ?? ''
   price.value = item.price
   notes.value = item.notes ?? ''
+  isEquipment.value = item.is_equipment
   const linkedCategories = item.item_categories.map((ic) => ic.categories!)
   selectedCategories.value = linkedCategories.filter((c) => !c.parent_id)
   selectedSubcategories.value = linkedCategories.filter((c) => c.parent_id)
@@ -493,6 +496,7 @@ async function save() {
     default_unit_id: defaultUnitId.value,
     price: price.value,
     notes: notes.value.trim() || null,
+    is_equipment: isEquipment.value,
   }
 
   let itemId = editingId.value
@@ -990,6 +994,8 @@ async function applyBulkCategory() {
           <UFormField label="Notes" hint="Optional">
             <UInput v-model="notes" placeholder="Notes" class="w-full" />
           </UFormField>
+
+          <UCheckbox v-model="isEquipment" label="Used as cooking equipment" class="whitespace-nowrap" />
 
           <UFormField label="Default Unit" hint="Optional">
             <div class="flex items-center gap-2">

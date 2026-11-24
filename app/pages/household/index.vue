@@ -11,8 +11,8 @@ const sections = [
     to: '/home-inventory',
   },
   {
-    label: 'Equipment',
-    description: 'Cooking tools, cookware, etc.',
+    label: 'Cooking Equipment',
+    description: 'Cooking tools, cookware, etc. - pulled from Items, Appliances, and Furniture.',
     to: '/equipment',
   },
   {

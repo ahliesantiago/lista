@@ -44,7 +44,7 @@ const navLinks = [
     children: [
       { to: '/pantry', label: 'Pantry' },
       { to: '/home-inventory', label: 'Home Inventory' },
-      { to: '/equipment', label: 'Equipment' },
+      { to: '/equipment', label: 'Cooking Equipment' },
       { to: '/appliances', label: 'Appliances' },
       { to: '/furniture', label: 'Furniture' },
       { to: '/rooms', label: 'Storage' },
@@ -86,7 +86,7 @@ const pageTitles: Record<string, string> = {
   '/household': 'Household',
   '/pantry': 'Pantry',
   '/home-inventory': 'Home Inventory',
-  '/equipment': 'Equipment',
+  '/equipment': 'Cooking Equipment',
   '/appliances': 'Appliances',
   '/furniture': 'Furniture',
   '/rooms': 'Storage',
