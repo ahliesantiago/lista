@@ -458,36 +458,48 @@ async function save() {
             >
               <div class="flex-1 cursor-pointer" @click="openEdit(p)">
                 <span class="font-medium">{{ p.item!.name }}</span>
-                <UBadge
+                <UChip
                   v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
                   :key="ic.categories!.id"
-                  size="sm"
+                  :show="ic.is_primary"
                   color="primary"
-                  variant="solid"
-                  class="ml-2 cursor-pointer"
-                  :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-                  @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+                  size="xs"
+                  class="ml-2"
                 >
-                  <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                  {{ ic.categories!.name }}
-                </UBadge>
-                <UBadge
+                  <UBadge
+                    size="sm"
+                    color="primary"
+                    variant="solid"
+                    class="cursor-pointer"
+                    :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                    @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+                  >
+                    {{ ic.categories!.name }}
+                  </UBadge>
+                </UChip>
+                <UChip
                   v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
                   :key="ic.categories!.id"
-                  size="sm"
+                  :show="ic.is_primary_subcategory"
                   color="warning"
-                  variant="subtle"
-                  class="ml-2 cursor-pointer"
-                  :title="
-                    ic.is_primary_subcategory
-                      ? 'Primary subcategory (used for grouping)'
-                      : 'Click to make this the primary subcategory'
-                  "
-                  @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+                  size="xs"
+                  class="ml-2"
                 >
-                  <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-                  {{ ic.categories!.name }}
-                </UBadge>
+                  <UBadge
+                    size="sm"
+                    color="warning"
+                    variant="subtle"
+                    class="cursor-pointer"
+                    :title="
+                      ic.is_primary_subcategory
+                        ? 'Primary subcategory (used for grouping)'
+                        : 'Click to make this the primary subcategory'
+                    "
+                    @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+                  >
+                    {{ ic.categories!.name }}
+                  </UBadge>
+                </UChip>
                 <UBadge
                   v-if="p.stock_status"
                   size="sm"
@@ -565,36 +577,48 @@ async function save() {
           >
             <div class="flex-1 cursor-pointer" @click="openEdit(p)">
               <span class="font-medium">{{ p.item!.name }}</span>
-              <UBadge
+              <UChip
                 v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
                 :key="ic.categories!.id"
-                size="sm"
+                :show="ic.is_primary"
                 color="primary"
-                variant="solid"
-                class="ml-2 cursor-pointer"
-                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-                @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+                size="xs"
+                class="ml-2"
               >
-                <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                {{ ic.categories!.name }}
-              </UBadge>
-              <UBadge
+                <UBadge
+                  size="sm"
+                  color="primary"
+                  variant="solid"
+                  class="cursor-pointer"
+                  :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                  @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+                >
+                  {{ ic.categories!.name }}
+                </UBadge>
+              </UChip>
+              <UChip
                 v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
                 :key="ic.categories!.id"
-                size="sm"
+                :show="ic.is_primary_subcategory"
                 color="warning"
-                variant="subtle"
-                class="ml-2 cursor-pointer"
-                :title="
-                  ic.is_primary_subcategory
-                    ? 'Primary subcategory (used for grouping)'
-                    : 'Click to make this the primary subcategory'
-                "
-                @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+                size="xs"
+                class="ml-2"
               >
-                <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-                {{ ic.categories!.name }}
-              </UBadge>
+                <UBadge
+                  size="sm"
+                  color="warning"
+                  variant="subtle"
+                  class="cursor-pointer"
+                  :title="
+                    ic.is_primary_subcategory
+                      ? 'Primary subcategory (used for grouping)'
+                      : 'Click to make this the primary subcategory'
+                  "
+                  @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+                >
+                  {{ ic.categories!.name }}
+                </UBadge>
+              </UChip>
               <UBadge
                 v-if="p.stock_status"
                 size="sm"
@@ -661,36 +685,48 @@ async function save() {
         >
           <div class="flex-1 cursor-pointer" @click="openEdit(p)">
             <span class="font-medium">{{ p.item!.name }}</span>
-            <UBadge
+            <UChip
               v-for="ic in p.item!.item_categories.filter((c) => !c.categories?.parent_id)"
               :key="ic.categories!.id"
-              size="sm"
+              :show="ic.is_primary"
               color="primary"
-              variant="solid"
-              class="ml-2 cursor-pointer"
-              :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-              @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+              size="xs"
+              class="ml-2"
             >
-              <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-              {{ ic.categories!.name }}
-            </UBadge>
-            <UBadge
+              <UBadge
+                size="sm"
+                color="primary"
+                variant="solid"
+                class="cursor-pointer"
+                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                @click.stop="setPrimaryCategory(p.item!.id, ic.categories!.id)"
+              >
+                {{ ic.categories!.name }}
+              </UBadge>
+            </UChip>
+            <UChip
               v-for="ic in p.item!.item_categories.filter((c) => c.categories?.parent_id)"
               :key="ic.categories!.id"
-              size="sm"
+              :show="ic.is_primary_subcategory"
               color="warning"
-              variant="subtle"
-              class="ml-2 cursor-pointer"
-              :title="
-                ic.is_primary_subcategory
-                  ? 'Primary subcategory (used for grouping)'
-                  : 'Click to make this the primary subcategory'
-              "
-              @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+              size="xs"
+              class="ml-2"
             >
-              <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-              {{ ic.categories!.name }}
-            </UBadge>
+              <UBadge
+                size="sm"
+                color="warning"
+                variant="subtle"
+                class="cursor-pointer"
+                :title="
+                  ic.is_primary_subcategory
+                    ? 'Primary subcategory (used for grouping)'
+                    : 'Click to make this the primary subcategory'
+                "
+                @click.stop="setPrimarySubcategory(p.item!.id, ic.categories!.id)"
+              >
+                {{ ic.categories!.name }}
+              </UBadge>
+            </UChip>
             <UBadge
               v-if="p.stock_status"
               size="sm"

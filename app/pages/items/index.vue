@@ -489,7 +489,7 @@ async function save() {
   const payload = {
     space_id: space.value.id,
     name: isNew ? capitalizeFirst(name.value.trim()) : name.value.trim(),
-    plural_name: pluralName.value.trim() || null,
+    plural_name: pluralName.value.trim() ? (isNew ? capitalizeFirst(pluralName.value.trim()) : pluralName.value.trim()) : null,
     default_unit_id: defaultUnitId.value,
     price: price.value,
     notes: notes.value.trim() || null,
@@ -793,49 +793,60 @@ async function applyBulkCategory() {
               <div>
                 <span class="font-medium">{{ item.name }}</span>
                 <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
-                <UBadge
+                <UChip
                   v-for="ic in item.item_categories.filter((c) => !c.categories?.parent_id)"
                   :key="ic.categories!.id"
-                  size="sm"
+                  :show="ic.is_primary"
                   color="primary"
-                  variant="solid"
-                  class="ml-2 cursor-pointer"
-                  :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-                  @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+                  size="xs"
+                  class="ml-2"
                 >
-                  <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                  {{ ic.categories!.name }}
-                </UBadge>
-                <UBadge
+                  <UBadge
+                    size="sm"
+                    color="primary"
+                    variant="solid"
+                    class="cursor-pointer"
+                    :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                    @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+                  >
+                    {{ ic.categories!.name }}
+                  </UBadge>
+                </UChip>
+                <UChip
                   v-for="ic in item.item_categories.filter((c) => c.categories?.parent_id)"
                   :key="ic.categories!.id"
-                  size="sm"
+                  :show="ic.is_primary_subcategory"
                   color="warning"
-                  variant="subtle"
-                  class="ml-2 cursor-pointer"
-                  :title="
-                    ic.is_primary_subcategory
-                      ? 'Primary subcategory (used for grouping)'
-                      : 'Click to make this the primary subcategory'
-                  "
-                  @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+                  size="xs"
+                  class="ml-2"
                 >
-                  <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-                  {{ ic.categories!.name }}
-                </UBadge>
-                <UBadge
-                  v-for="t in item.item_tags"
-                  :key="t.tags!.id"
-                  size="sm"
-                  color="neutral"
-                  variant="outline"
-                  class="ml-2 cursor-pointer"
-                  :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-                  @click.stop="setPrimaryTag(item.id, t.tags!.id)"
-                >
-                  <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-                  {{ t.tags!.name }}
-                </UBadge>
+                  <UBadge
+                    size="sm"
+                    color="warning"
+                    variant="subtle"
+                    class="cursor-pointer"
+                    :title="
+                      ic.is_primary_subcategory
+                        ? 'Primary subcategory (used for grouping)'
+                        : 'Click to make this the primary subcategory'
+                    "
+                    @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+                  >
+                    {{ ic.categories!.name }}
+                  </UBadge>
+                </UChip>
+                <UChip v-for="t in item.item_tags" :key="t.tags!.id" :show="t.is_primary" color="neutral" size="xs" class="ml-2">
+                  <UBadge
+                    size="sm"
+                    color="neutral"
+                    variant="outline"
+                    class="cursor-pointer"
+                    :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+                    @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+                  >
+                    {{ t.tags!.name }}
+                  </UBadge>
+                </UChip>
                 <p v-if="item.notes" class="text-muted mt-1 text-sm">{{ item.notes }}</p>
               </div>
             </div>
@@ -868,49 +879,60 @@ async function applyBulkCategory() {
           <div>
             <span class="font-medium">{{ item.name }}</span>
             <span v-if="item.price != null" class="text-muted ml-2 text-sm">${{ item.price }}</span>
-            <UBadge
+            <UChip
               v-for="ic in item.item_categories.filter((c) => !c.categories?.parent_id)"
               :key="ic.categories!.id"
-              size="sm"
+              :show="ic.is_primary"
               color="primary"
-              variant="solid"
-              class="ml-2 cursor-pointer"
-              :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-              @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+              size="xs"
+              class="ml-2"
             >
-              <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-              {{ ic.categories!.name }}
-            </UBadge>
-            <UBadge
+              <UBadge
+                size="sm"
+                color="primary"
+                variant="solid"
+                class="cursor-pointer"
+                :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+                @click.stop="setPrimaryCategory(item.id, ic.categories!.id)"
+              >
+                {{ ic.categories!.name }}
+              </UBadge>
+            </UChip>
+            <UChip
               v-for="ic in item.item_categories.filter((c) => c.categories?.parent_id)"
               :key="ic.categories!.id"
-              size="sm"
+              :show="ic.is_primary_subcategory"
               color="warning"
-              variant="subtle"
-              class="ml-2 cursor-pointer"
-              :title="
-                ic.is_primary_subcategory
-                  ? 'Primary subcategory (used for grouping)'
-                  : 'Click to make this the primary subcategory'
-              "
-              @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+              size="xs"
+              class="ml-2"
             >
-              <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-              {{ ic.categories!.name }}
-            </UBadge>
-            <UBadge
-              v-for="t in item.item_tags"
-              :key="t.tags!.id"
-              size="sm"
-              color="neutral"
-              variant="outline"
-              class="ml-2 cursor-pointer"
-              :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-              @click.stop="setPrimaryTag(item.id, t.tags!.id)"
-            >
-              <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-              {{ t.tags!.name }}
-            </UBadge>
+              <UBadge
+                size="sm"
+                color="warning"
+                variant="subtle"
+                class="cursor-pointer"
+                :title="
+                  ic.is_primary_subcategory
+                    ? 'Primary subcategory (used for grouping)'
+                    : 'Click to make this the primary subcategory'
+                "
+                @click.stop="setPrimarySubcategory(item.id, ic.categories!.id)"
+              >
+                {{ ic.categories!.name }}
+              </UBadge>
+            </UChip>
+            <UChip v-for="t in item.item_tags" :key="t.tags!.id" :show="t.is_primary" color="neutral" size="xs" class="ml-2">
+              <UBadge
+                size="sm"
+                color="neutral"
+                variant="outline"
+                class="cursor-pointer"
+                :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+                @click.stop="setPrimaryTag(item.id, t.tags!.id)"
+              >
+                {{ t.tags!.name }}
+              </UBadge>
+            </UChip>
             <p v-if="item.notes" class="text-muted mt-1 text-sm">{{ item.notes }}</p>
           </div>
         </div>

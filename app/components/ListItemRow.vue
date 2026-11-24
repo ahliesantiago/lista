@@ -159,47 +159,52 @@ const editUnitOptionsForAmount = computed(() => {
         </label>
 
         <div v-if="variant === 'checklist'" class="hidden flex-wrap items-center gap-1 sm:flex">
-          <UBadge
-            v-for="ic in mainCategories"
-            :key="ic.categories!.id"
-            size="sm"
-            color="primary"
-            variant="solid"
-            class="cursor-pointer"
-            :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-            @click.stop="emit('switch-category', ic.categories!.id)"
-          >
-            <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-            {{ ic.categories!.name }}
-          </UBadge>
-          <UBadge
+          <UChip v-for="ic in mainCategories" :key="ic.categories!.id" :show="ic.is_primary" color="primary" size="xs">
+            <UBadge
+              size="sm"
+              color="primary"
+              variant="solid"
+              class="cursor-pointer"
+              :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+              @click.stop="emit('switch-category', ic.categories!.id)"
+            >
+              {{ ic.categories!.name }}
+            </UBadge>
+          </UChip>
+          <UChip
             v-for="ic in subcategories"
             :key="ic.categories!.id"
-            size="sm"
+            :show="ic.is_primary_subcategory"
             color="warning"
-            variant="subtle"
-            class="cursor-pointer"
-            :title="
-              ic.is_primary_subcategory ? 'Primary subcategory (used for grouping)' : 'Click to make this the primary subcategory'
-            "
-            @click.stop="emit('switch-subcategory', ic.categories!.id)"
+            size="xs"
           >
-            <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-            {{ ic.categories!.name }}
-          </UBadge>
-          <UBadge
-            v-for="t in item.item?.item_tags ?? []"
-            :key="t.tags!.id"
-            size="sm"
-            color="neutral"
-            variant="outline"
-            class="cursor-pointer"
-            :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-            @click.stop="emit('switch-tag', t.tags!.id)"
-          >
-            <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-            {{ t.tags!.name }}
-          </UBadge>
+            <UBadge
+              size="sm"
+              color="warning"
+              variant="subtle"
+              class="cursor-pointer"
+              :title="
+                ic.is_primary_subcategory
+                  ? 'Primary subcategory (used for grouping)'
+                  : 'Click to make this the primary subcategory'
+              "
+              @click.stop="emit('switch-subcategory', ic.categories!.id)"
+            >
+              {{ ic.categories!.name }}
+            </UBadge>
+          </UChip>
+          <UChip v-for="t in item.item?.item_tags ?? []" :key="t.tags!.id" :show="t.is_primary" color="neutral" size="xs">
+            <UBadge
+              size="sm"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer"
+              :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+              @click.stop="emit('switch-tag', t.tags!.id)"
+            >
+              {{ t.tags!.name }}
+            </UBadge>
+          </UChip>
         </div>
       </div>
       <div class="flex shrink-0 items-center">
@@ -238,47 +243,52 @@ const editUnitOptionsForAmount = computed(() => {
       v-if="variant === 'checklist' && ((item.item?.item_categories.length ?? 0) > 0 || (item.item?.item_tags.length ?? 0) > 0)"
       class="mt-1 ml-7 flex flex-wrap items-center gap-1 sm:hidden"
     >
-      <UBadge
-        v-for="ic in mainCategories"
-        :key="ic.categories!.id"
-        size="xs"
-        color="primary"
-        variant="solid"
-        class="cursor-pointer"
-        :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
-        @click.stop="emit('switch-category', ic.categories!.id)"
-      >
-        <UIcon v-if="ic.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-        {{ ic.categories!.name }}
-      </UBadge>
-      <UBadge
+      <UChip v-for="ic in mainCategories" :key="ic.categories!.id" :show="ic.is_primary" color="primary" size="2xs">
+        <UBadge
+          size="xs"
+          color="primary"
+          variant="solid"
+          class="cursor-pointer"
+          :title="ic.is_primary ? 'Primary category (used for grouping)' : 'Click to make this the primary category'"
+          @click.stop="emit('switch-category', ic.categories!.id)"
+        >
+          {{ ic.categories!.name }}
+        </UBadge>
+      </UChip>
+      <UChip
         v-for="ic in subcategories"
         :key="ic.categories!.id"
-        size="xs"
+        :show="ic.is_primary_subcategory"
         color="warning"
-        variant="subtle"
-        class="cursor-pointer"
-        :title="
-          ic.is_primary_subcategory ? 'Primary subcategory (used for grouping)' : 'Click to make this the primary subcategory'
-        "
-        @click.stop="emit('switch-subcategory', ic.categories!.id)"
+        size="2xs"
       >
-        <UIcon v-if="ic.is_primary_subcategory" name="i-lucide-star" class="mr-1 size-3" />
-        {{ ic.categories!.name }}
-      </UBadge>
-      <UBadge
-        v-for="t in item.item?.item_tags ?? []"
-        :key="t.tags!.id"
-        size="xs"
-        color="neutral"
-        variant="outline"
-        class="cursor-pointer"
-        :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
-        @click.stop="emit('switch-tag', t.tags!.id)"
-      >
-        <UIcon v-if="t.is_primary" name="i-lucide-star" class="mr-1 size-3" />
-        {{ t.tags!.name }}
-      </UBadge>
+        <UBadge
+          size="xs"
+          color="warning"
+          variant="subtle"
+          class="cursor-pointer"
+          :title="
+            ic.is_primary_subcategory
+              ? 'Primary subcategory (used for grouping)'
+              : 'Click to make this the primary subcategory'
+          "
+          @click.stop="emit('switch-subcategory', ic.categories!.id)"
+        >
+          {{ ic.categories!.name }}
+        </UBadge>
+      </UChip>
+      <UChip v-for="t in item.item?.item_tags ?? []" :key="t.tags!.id" :show="t.is_primary" color="neutral" size="2xs">
+        <UBadge
+          size="xs"
+          color="neutral"
+          variant="outline"
+          class="cursor-pointer"
+          :title="t.is_primary ? 'Primary tag (used for grouping)' : 'Click to make this the primary tag'"
+          @click.stop="emit('switch-tag', t.tags!.id)"
+        >
+          {{ t.tags!.name }}
+        </UBadge>
+      </UChip>
     </div>
     </template>
 

@@ -53,9 +53,9 @@ const householdTiles = [
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <h2 class="mb-6 text-lg text-muted text-center">
-      Welcome back<span v-if="currentSpace"> to {{ currentSpace.name }}</span>
-    </h2>
+    <h1 class="mb-6 text-center text-2xl font-semibold">
+      {{ currentSpace ? currentSpace.name : 'Dashboard' }}
+    </h1>
 
     <!-- Lists & Recipes -->
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
