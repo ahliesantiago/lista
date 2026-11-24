@@ -306,6 +306,17 @@ async function saveListField(patch: Record<string, unknown>) {
   if (list.value) Object.assign(list.value, patch)
 }
 
+// clicking "Done editing" toggles viewMode synchronously, which unmounts
+// the name/description/notes inputs - their own @blur handlers can't be
+// relied on to fire first (removing a focused element doesn't reliably
+// dispatch blur before Vue's patch), so save explicitly on the way out
+async function toggleViewMode() {
+  if (viewMode.value === 'edit') {
+    await saveListField({ name: name.value, description: description.value || null, notes: notes.value || null })
+  }
+  viewMode.value = viewMode.value === 'view' ? 'edit' : 'view'
+}
+
 watch(selectedCategories, async (newVal, oldVal) => {
   if (newVal.length > MAX_CATEGORIES) {
     selectedCategories.value = newVal.slice(0, MAX_CATEGORIES)
@@ -920,7 +931,7 @@ async function deleteList() {
         </UFormField>
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <UButton size="sm" variant="outline" @click="viewMode = viewMode === 'view' ? 'edit' : 'view'">
+        <UButton size="sm" variant="outline" @click="toggleViewMode">
           {{ viewMode === 'view' ? 'Edit' : 'Done editing' }}
         </UButton>
         <UButton v-if="list.status === 'active'" size="sm" variant="outline" @click="setStatus('archived')">
