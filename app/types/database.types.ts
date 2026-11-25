@@ -1489,6 +1489,7 @@ export type Database = {
           avatar_url: string | null
           id: string
           preferred_name: string | null
+          primary_color: string | null
           updated_at: string | null
           username: string
           website: string | null
@@ -1497,6 +1498,7 @@ export type Database = {
           avatar_url?: string | null
           id: string
           preferred_name?: string | null
+          primary_color?: string | null
           updated_at?: string | null
           username: string
           website?: string | null
@@ -1505,6 +1507,7 @@ export type Database = {
           avatar_url?: string | null
           id?: string
           preferred_name?: string | null
+          primary_color?: string | null
           updated_at?: string | null
           username?: string
           website?: string | null

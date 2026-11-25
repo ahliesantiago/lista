@@ -136,7 +136,7 @@ async function savePassword() {
             <UColorModeSelect class="w-40" />
           </UFormField>
 
-          <UFormField label="Color scheme">
+          <UFormField label="Color scheme" hint="Synced to your account">
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="color in PRIMARY_COLOR_OPTIONS"
