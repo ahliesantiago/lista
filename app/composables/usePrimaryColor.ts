@@ -1,3 +1,9 @@
+import tailwindColors from 'tailwindcss/colors'
+import { PRIMARY_COLOR_OPTIONS, PRIMARY_COLOR_SHADES, type PrimaryColor } from '~~/shared/primaryColors'
+
+export { PRIMARY_COLOR_OPTIONS }
+export type { PrimaryColor }
+
 // Nuxt UI generates its color CSS vars reactively off appConfig.ui.colors
 // (see its own runtime colors plugin), so calling updateAppConfig() here is
 // enough to re-theme the whole app live - no page reload needed.
@@ -12,36 +18,31 @@
 //   one it was picked in. syncPrimaryColorFromAccount() reconciles this in
 //   after the fact, once the signed-in user is known - it doesn't block
 //   first paint on a network round trip.
-export const PRIMARY_COLOR_OPTIONS = [
-  'red',
-  'mauve',
-  'orange',
-  'amber',
-  'yellow',
-  'lime',
-  'green',
-  'emerald',
-  'teal',
-  'mist',
-  'cyan',
-  'sky',
-  'blue',
-  'slate',
-  'indigo',
-  'violet',
-  'purple',
-  'fuchsia',
-  'pink',
-  'rose',
-  'zinc',
-  'taupe',
-] as const
-export type PrimaryColor = (typeof PRIMARY_COLOR_OPTIONS)[number]
-
 const STORAGE_KEY = 'lista-primary-color'
 
 function isValidColor(value: unknown): value is PrimaryColor {
   return typeof value === 'string' && (PRIMARY_COLOR_OPTIONS as readonly string[]).includes(value)
+}
+
+// Mirrors the inline boot script's logic, with the same fallback-value
+// safety net Nuxt UI's own colors plugin relies on - without a real color
+// baked in as the fallback, var(--color-X-Y) can resolve to nothing at all
+// if that CSS variable isn't actually defined (e.g. for a color Tailwind's
+// own generated CSS doesn't happen to include), leaving buttons colorless.
+// Setting these as inline styles on <html> on every call (not just at boot)
+// also means a live color change in Settings can't get masked by whatever
+// the boot script already applied earlier in this same page session.
+function applyInlineStyleOverride(color: PrimaryColor) {
+  if (typeof document === 'undefined') return
+  const palette = (tailwindColors as Record<string, Record<number, string> | undefined>)[color]
+  const root = document.documentElement
+  for (const shade of PRIMARY_COLOR_SHADES) {
+    const fallback = palette?.[shade]
+    root.style.setProperty(
+      `--ui-color-primary-${shade}`,
+      fallback ? `var(--color-${color}-${shade}, ${fallback})` : `var(--color-${color}-${shade})`,
+    )
+  }
 }
 
 export function usePrimaryColor() {
@@ -54,6 +55,7 @@ export function usePrimaryColor() {
   function applyColor(color: PrimaryColor) {
     updateAppConfig({ ui: { colors: { primary: color } } })
     if (!import.meta.client) return
+    applyInlineStyleOverride(color)
     try {
       localStorage.setItem(STORAGE_KEY, color)
     } catch {

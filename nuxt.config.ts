@@ -1,3 +1,40 @@
+import tailwindColors from 'tailwindcss/colors'
+import { PRIMARY_COLOR_OPTIONS, PRIMARY_COLOR_SHADES } from './shared/primaryColors'
+
+// Applies the stored primary color before first paint, the same way
+// @nuxtjs/color-mode avoids a light/dark flash - without this, the page
+// always paints the default first, then visibly swaps once
+// primary-color.client.ts runs after hydration.
+//
+// The color list/shades are imported from shared/primaryColors.ts (not
+// duplicated here) so this can never drift out of sync with the app's own
+// list again. Each shade gets a real color value baked in as a fallback,
+// mirroring Nuxt UI's own colors plugin - without it, var(--color-X-Y) can
+// resolve to nothing if that CSS variable isn't actually defined, which is
+// exactly what caused colorless buttons before this fallback existed.
+function buildPrimaryColorInitScript(): string {
+  const fallbacks: Record<string, Partial<Record<number, string>>> = {}
+  for (const color of PRIMARY_COLOR_OPTIONS) {
+    const palette = (tailwindColors as Record<string, Record<number, string> | undefined>)[color]
+    if (palette) fallbacks[color] = palette
+  }
+  return `(function(){try{
+var c=localStorage.getItem('lista-primary-color');
+var valid=${JSON.stringify(PRIMARY_COLOR_OPTIONS)};
+var fallbacks=${JSON.stringify(fallbacks)};
+if(c&&valid.indexOf(c)!==-1){
+var shades=${JSON.stringify(PRIMARY_COLOR_SHADES)};
+var root=document.documentElement;
+var palette=fallbacks[c]||{};
+for(var i=0;i<shades.length;i++){
+var shade=shades[i];
+var fallback=palette[shade];
+root.style.setProperty('--ui-color-primary-'+shade, fallback?('var(--color-'+c+'-'+shade+', '+fallback+')'):('var(--color-'+c+'-'+shade+')'));
+}
+}
+}catch(e){}})()`
+}
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxtjs/supabase', '@nuxt/ui', '@vite-pwa/nuxt'],
@@ -13,14 +50,7 @@ export default defineNuxtConfig({
       script: [
         {
           key: 'primary-color-init',
-          // Applies the stored primary color before first paint, the same
-          // way @nuxtjs/color-mode avoids a light/dark flash - without
-          // this, the page always paints the default (blue) first, then
-          // visibly swaps once primary-color.client.ts runs after hydration.
-          // The color list here is duplicated from usePrimaryColor.ts on
-          // purpose: this has to be a plain string (it runs pre-hydration,
-          // before any app code/imports exist), so keep the two in sync.
-          innerHTML: `(function(){try{var c=localStorage.getItem('lista-primary-color');var valid=['red','orange','amber','yellow','lime','green','emerald','teal','cyan','sky','blue','indigo','violet','purple','fuchsia','pink','rose'];if(c&&valid.indexOf(c)!==-1){var shades=[50,100,200,300,400,500,600,700,800,900,950];var root=document.documentElement;for(var i=0;i<shades.length;i++){root.style.setProperty('--ui-color-primary-'+shades[i],'var(--color-'+c+'-'+shades[i]+')')}}}catch(e){}})()`,
+          innerHTML: buildPrimaryColorInitScript(),
         },
       ],
     },
